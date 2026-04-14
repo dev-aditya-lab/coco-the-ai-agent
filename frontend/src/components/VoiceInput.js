@@ -89,9 +89,9 @@ export default function VoiceInput({
       type="button"
       onClick={toggleListening}
       disabled={disabled || !recognitionRef.current}
-      className={`inline-flex h-10 w-10 items-center justify-center rounded-xl border transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40 disabled:cursor-not-allowed disabled:opacity-60 ${
+      className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40 disabled:cursor-not-allowed disabled:opacity-60 ${
         isListening
-          ? "border-red-300/35 bg-red-400/12 text-red-200"
+          ? "border-red-300/35 bg-red-400/12 text-red-200 shadow-[0_0_18px_rgba(248,113,113,0.24)]"
           : "border-white/12 bg-black/35 text-zinc-300 hover:border-cyan-300/35 hover:text-cyan-200"
       }`}
       aria-label={isListening ? "Stop voice input" : "Start voice input"}

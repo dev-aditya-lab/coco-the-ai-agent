@@ -1,14 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Volume2, VolumeX } from "lucide-react";
 import AssistantLayout from "@/components/assistant-layout";
 import CommandInput from "@/components/command-input";
 import CommandSuggestions from "@/components/command-suggestions";
 import HistoryPanel from "@/components/HistoryPanel";
-import Loader from "@/components/loader";
-import ResponseBox from "@/components/response-box";
+import StatusIndicator from "@/components/status-indicator";
+import TerminalView from "@/components/terminal-view";
 import VoiceInput from "@/components/VoiceInput";
+import VoiceIndicator from "@/components/voice-indicator";
 import { fetchCommandHistory, submitCommand } from "@/services/assistant-service";
 
 const PHASE = {
@@ -127,19 +128,7 @@ export default function AssistantConsole() {
   const [isMuted, setIsMuted] = useState(false);
   const speechRef = useRef(null);
 
-  const showLoader = isLoading || phase === PHASE.completed;
-
-  const logs = useMemo(() => {
-    if (!response?.stepsExecuted) {
-      return [];
-    }
-
-    return response.stepsExecuted.map((step) => ({
-      title: `Step ${step.stepNumber}: ${step.action}`,
-      status: step.status,
-      details: step.message,
-    }));
-  }, [response]);
+  const showStatus = isLoading || phase === PHASE.completed || phase === PHASE.error;
 
   useEffect(() => {
     refreshHistory();
@@ -254,6 +243,11 @@ export default function AssistantConsole() {
         onCommandKeyDown={handleCommandKeyDown}
         onSubmit={handleSubmit}
       />
+      <div className="grid gap-2 rounded-2xl border border-white/10 bg-black/45 p-3 sm:grid-cols-2 sm:p-4">
+        <StatusIndicator isVisible={showStatus} phase={phase} />
+        <VoiceIndicator isListening={isListening} isSpeaking={isSpeaking} />
+      </div>
+
       <div className="flex flex-wrap items-center gap-3">
         <VoiceInput
           disabled={isLoading}
@@ -270,24 +264,12 @@ export default function AssistantConsole() {
         >
           {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
         </button>
-
-        {isListening ? (
-          <span className="rounded-full border border-red-300/30 bg-red-300/10 px-3 py-1 text-xs uppercase tracking-[0.22em] text-red-200">
-            Listening...
-          </span>
-        ) : null}
-
-        {isSpeaking ? (
-          <span className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-xs uppercase tracking-[0.22em] text-cyan-100">
-            Speaking...
-          </span>
-        ) : null}
       </div>
+
+      <TerminalView command={command} error={error} phase={phase} response={response} />
 
       <CommandSuggestions isLoading={isLoading} onUseCommand={handleSuggestion} />
       <HistoryPanel history={history} isLoading={isLoading} onRefresh={refreshHistory} onReuse={handleSuggestion} />
-      <Loader isVisible={showLoader} phase={phase} />
-      <ResponseBox error={error} logs={logs} response={response} />
     </AssistantLayout>
   );
 }

@@ -17,7 +17,7 @@ const SUGGESTED_COMMANDS = [
 
 export default function CommandSuggestions({ onUseCommand, isLoading }) {
   return (
-    <section className="space-y-4 rounded-3xl border border-white/10 bg-white/2 p-5 backdrop-blur-xl sm:p-6">
+    <section className="space-y-4 rounded-2xl border border-white/10 bg-black/45 p-4 sm:p-5">
       <div className="flex items-center gap-2 text-xs uppercase tracking-[0.26em] text-zinc-500">
         <MousePointerClick className="h-4 w-4" aria-hidden="true" />
         <span>Demo mode</span>
@@ -30,7 +30,7 @@ export default function CommandSuggestions({ onUseCommand, isLoading }) {
             type="button"
             disabled={isLoading}
             onClick={() => onUseCommand(item.value)}
-            className="rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-sm text-cyan-100 transition duration-200 hover:scale-[1.02] hover:border-cyan-300/45 hover:bg-cyan-300/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 font-mono text-xs text-cyan-100 transition duration-200 hover:border-cyan-300/45 hover:bg-cyan-300/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {item.label}
           </button>
@@ -49,7 +49,7 @@ export default function CommandSuggestions({ onUseCommand, isLoading }) {
               type="button"
               disabled={isLoading}
               onClick={() => onUseCommand(item)}
-              className="rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-left text-sm text-zinc-300 transition duration-200 hover:border-white/25 hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-lg border border-white/10 bg-black/60 px-3 py-2 text-left font-mono text-xs text-zinc-300 transition duration-200 hover:border-white/25 hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {item}
             </button>
