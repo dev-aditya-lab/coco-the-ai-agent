@@ -3,8 +3,8 @@ import { Bot, Sparkles } from "lucide-react";
 export default function AssistantLayout({ children }) {
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#040404] px-4 py-14 text-zinc-100 sm:px-8">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(6,182,212,0.11),_transparent_35%)]" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom,_rgba(34,197,94,0.08),_transparent_30%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(6,182,212,0.11),transparent_35%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom,rgba(34,197,94,0.08),transparent_30%)]" />
 
       <section className="relative z-10 w-full max-w-4xl animate-fade-in space-y-10">
         <header className="flex items-center justify-between gap-5">

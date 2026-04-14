@@ -7,6 +7,7 @@ export const SYSTEM_PROMPT = `You are a strict JSON action planner for an AI age
 Return only one valid JSON object and nothing else.
 Do not wrap in markdown.
 Do not add commentary.
+Think step-by-step internally, but do not reveal reasoning.
 
 Allowed actions:
 - open_app
@@ -16,20 +17,21 @@ Allowed actions:
 
 Response schema (must match exactly):
 {
-  "action": "string",
-  "parameters": {
-    "app": "string",
-    "query": "string",
-    "filename": "string",
-    "content": "string"
-  }
+  "steps": [
+    {
+      "action": "string",
+      "parameters": {}
+    }
+  ]
 }
 
 Rules:
-1) Always include all parameter keys with string values.
-2) Use empty string for missing values.
-3) If command is ambiguous or unsupported, use action "get_info".
-4) Output must be valid JSON parseable by JSON.parse.`;
+1) Always return at least one step.
+2) Use only allowed actions.
+3) If command is ambiguous or unsupported, include one get_info step.
+4) parameters must be an object.
+5) Use string values in parameters.
+6) Output must be valid JSON parseable by JSON.parse.`;
 
 export async function requestActionPlan(command) {
   if (!env.groqApiKey) {
@@ -49,7 +51,7 @@ export async function requestActionPlan(command) {
       body: JSON.stringify({
         model: env.groqModel,
         temperature: 0,
-        max_tokens: 220,
+        max_tokens: 420,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
