@@ -1,15 +1,32 @@
-import { requestActionPlan } from "../services/aiService.js";
+import { requestActionPlanWithHistory } from "../services/aiService.js";
 import { executeAction } from "../services/actionHandler.js";
 import { env } from "../config/env.js";
 import { getRecentCommands, saveCommandHistory } from "../services/historyService.js";
 
-const ALLOWED_ACTIONS = new Set(["open_app", "play_youtube", "create_file", "get_info", "chat"]);
+const ALLOWED_ACTIONS = new Set(["open_app", "open_website", "play_youtube", "create_file", "get_info", "chat"]);
+const MAX_CONVERSATION_MESSAGES = 10;
 const conversationState = {
   name: "",
+  history: [],
 };
 
 function normalizeString(value) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function appendConversationHistory(role, content) {
+  const safeRole = role === "assistant" ? "assistant" : "user";
+  const safeContent = normalizeString(content);
+
+  if (!safeContent) {
+    return;
+  }
+
+  conversationState.history.push({ role: safeRole, content: safeContent });
+
+  if (conversationState.history.length > MAX_CONVERSATION_MESSAGES) {
+    conversationState.history = conversationState.history.slice(-MAX_CONVERSATION_MESSAGES);
+  }
 }
 
 function extractNameFromText(text) {
@@ -31,32 +48,56 @@ function extractNameFromText(text) {
     .join(" ");
 }
 
+function isGreetingMessage(text) {
+  const normalized = normalizeString(text).toLowerCase();
+  return /\b(hi|hello|hey|namaste|yo)\b/.test(normalized);
+}
+
+function isIntroMessage(text) {
+  const normalized = normalizeString(text).toLowerCase();
+  return /\b(i am|i'm|my name is)\b/.test(normalized);
+}
+
+function personalizeChatResponse(command, response) {
+  const safeResponse = normalizeString(response);
+
+  if (isGreetingMessage(command) && !isIntroMessage(command) && conversationState.name) {
+    return `Welcome back ${conversationState.name}, kaise help karu?`;
+  }
+
+  return safeResponse || buildConversationResponse(command);
+}
+
 function buildConversationResponse(command) {
   const normalized = normalizeString(command).toLowerCase();
   const extractedName = extractNameFromText(command);
 
+  if (/\bwho are you\b/.test(normalized)) {
+    return "Main COCO hoon, ek AI assistant jo Aditya Gupta ne banaya hai. Main tasks perform kar sakta hoon aur questions ka answer de sakta hoon.";
+  }
+
   if (extractedName) {
     conversationState.name = extractedName;
-    return `Hi ${extractedName}, nice to meet you. How can I help?`;
+    return `Hi ${extractedName}, nice to meet you. Kaise help karu?`;
   }
 
   if (/\bhow are you\b/.test(normalized)) {
-    return "I'm doing well, ready to help you.";
+    return "Main ready hoon help karne ke liye.";
   }
 
   if (/\b(what are you doing|what you doing|what're you doing)\b/.test(normalized)) {
-    return "I'm here to help you with tasks or answer questions.";
+    return "Main yaha tasks aur questions me help karne ke liye hoon.";
   }
 
   if (/\b(hi|hello|hey|namaste|yo)\b/.test(normalized)) {
     if (conversationState.name) {
-      return `Hello ${conversationState.name}, how can I assist you?`;
+      return `Hello ${conversationState.name}, kaise help kar sakta hoon?`;
     }
 
-    return "Hello, how can I assist you?";
+    return "Hello, kaise help kar sakta hoon?";
   }
 
-  return "Sure, I am here with you. Tell me what you want to do next.";
+  return "Thoda clear karo, samajh nahi aaya.";
 }
 
 function buildFallback(command, reason = "fallback") {
@@ -124,9 +165,10 @@ function normalizeStep(stepPayload, originalCommand, source = "groq") {
 
   if (action === "chat") {
     const topLevelResponse = normalizeString(stepPayload.response);
-    if (!parameters.response) {
-      parameters.response = topLevelResponse || buildConversationResponse(originalCommand);
-    }
+    parameters.response = personalizeChatResponse(
+      originalCommand,
+      parameters.response || topLevelResponse
+    );
   }
 
   if (action === "get_info" && !parameters.query) {
@@ -268,10 +310,25 @@ function buildFinalMessage(stepsExecuted) {
   }
 
   if (stepsExecuted.length === 1 && stepsExecuted[0]?.action === "chat") {
-    return stepsExecuted[0].message || "Hello, how can I assist you?";
+    return stepsExecuted[0].message || "Hello, kaise help kar sakta hoon?";
   }
 
-  return `Executed ${stepsExecuted.length} step(s) successfully.`;
+  if (stepsExecuted.length === 1) {
+    return stepsExecuted[0].message || "Kaam ho gaya.";
+  }
+
+  return "Kaam complete ho gaya.";
+}
+
+function buildModePayload(stepsExecuted) {
+  if (stepsExecuted.length === 1 && stepsExecuted[0]?.action === "chat") {
+    return {
+      action: "chat",
+      response: stepsExecuted[0].message || "Hello, kaise help kar sakta hoon?",
+    };
+  }
+
+  return null;
 }
 
 export async function postCommand(req, res) {
@@ -286,8 +343,13 @@ export async function postCommand(req, res) {
 
   console.info("[command] input", { command });
 
+  const extractedName = extractNameFromText(command);
+  if (extractedName) {
+    conversationState.name = extractedName;
+  }
+
   try {
-    const rawResponse = await requestActionPlan(command);
+    const rawResponse = await requestActionPlanWithHistory(command, conversationState.history);
     console.info("[command] ai_response", { rawResponse });
 
     const parsedJson = parseActionJson(rawResponse);
@@ -295,11 +357,16 @@ export async function postCommand(req, res) {
 
     const actionSteps = validateActionPayload(parsedJson, command);
     const stepsExecuted = await executeSteps(actionSteps, command);
+    const finalMessage = buildFinalMessage(stepsExecuted);
+
+    appendConversationHistory("user", command);
+    appendConversationHistory("assistant", finalMessage);
 
     return res.status(200).json({
       success: stepsExecuted.every((step) => step.status !== "failed"),
       stepsExecuted,
-      finalMessage: buildFinalMessage(stepsExecuted),
+      finalMessage,
+      modePayload: buildModePayload(stepsExecuted),
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -307,11 +374,16 @@ export async function postCommand(req, res) {
 
     const fallbackSteps = [buildFallback(command, "parse_or_provider_error")];
     const stepsExecuted = await executeSteps(fallbackSteps, command);
+    const finalMessage = buildFinalMessage(stepsExecuted);
+
+    appendConversationHistory("user", command);
+    appendConversationHistory("assistant", finalMessage);
 
     return res.status(200).json({
       success: stepsExecuted.every((step) => step.status !== "failed"),
       stepsExecuted,
-      finalMessage: buildFinalMessage(stepsExecuted),
+      finalMessage,
+      modePayload: buildModePayload(stepsExecuted),
       timestamp: new Date().toISOString(),
     });
   }

@@ -26,6 +26,32 @@ const FILLER_PATTERNS = [
 ];
 
 const ALLOWED_FILE_EXTENSIONS = new Set([".txt", ".md", ".js", ".ts", ".json", ".py", ".html", ".css"]);
+const WEBSITE_HINT_KEYWORDS = [
+  "youtube",
+  "google",
+  "gmail",
+  "instagram",
+  "linkedin",
+  "twitter",
+  "facebook",
+  "github",
+  "stackoverflow",
+  "netflix",
+  "amazon",
+  "reddit",
+];
+
+const WEBSITE_MAP = {
+  youtube: "https://youtube.com",
+  google: "https://google.com",
+  gmail: "https://mail.google.com",
+  instagram: "https://instagram.com",
+  linkedin: "https://linkedin.com",
+  twitter: "https://x.com",
+  x: "https://x.com",
+  github: "https://github.com",
+  facebook: "https://facebook.com",
+};
 
 function asText(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -57,6 +83,116 @@ function normalizeAppCandidate(value) {
   }
 
   return normalized;
+}
+
+function normalizeOpenTarget(value) {
+  return normalizeAppCandidate(value).replace(/\s+/g, " ").trim();
+}
+
+function sanitizeHostLabel(value) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9.-]/g, "")
+    .replace(/\.+/g, ".")
+    .replace(/^\.+|\.+$/g, "");
+}
+
+function hostToLabel(urlLike) {
+  const text = asText(urlLike);
+  if (!text) {
+    return "Website";
+  }
+
+  try {
+    const withScheme = /^https?:\/\//i.test(text) ? text : `https://${text}`;
+    const { hostname } = new URL(withScheme);
+    const cleanHost = hostname.replace(/^www\./i, "");
+    const primary = cleanHost.split(".")[0] || cleanHost;
+    return titleCase(primary || "Website");
+  } catch {
+    return titleCase(normalizeOpenTarget(text) || "Website");
+  }
+}
+
+function isLikelyWebsiteName(target) {
+  if (!target) {
+    return false;
+  }
+
+  if (target.includes(".") || target.includes("www")) {
+    return true;
+  }
+
+  return WEBSITE_HINT_KEYWORDS.some((hint) => target.includes(hint));
+}
+
+function extractOpenTarget(parameters) {
+  return firstNonEmpty(
+    parameters.app_name,
+    parameters.app,
+    parameters.site,
+    parameters.website,
+    parameters.service,
+    parameters.query,
+    parameters.url
+  );
+}
+
+function buildWebsiteUrl(rawTarget) {
+  const source = asText(rawTarget);
+  const sourceLower = source.toLowerCase();
+  const target = normalizeOpenTarget(rawTarget);
+
+  if (!source && !target) {
+    return "";
+  }
+
+  const hasScheme = /^https?:\/\//i.test(sourceLower);
+  if (hasScheme) {
+    try {
+      const parsed = new URL(source);
+      const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+      if (WEBSITE_MAP[host]) {
+        return WEBSITE_MAP[host];
+      }
+      return source;
+    } catch {
+      return source;
+    }
+  }
+
+  const mapped = Object.entries(WEBSITE_MAP).find(([key]) => {
+    if (key.length <= 2) {
+      return target === key || sourceLower === key;
+    }
+
+    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const exact = target === key || sourceLower === key;
+    const tokenMatch = new RegExp(`\\b${escaped}\\b`).test(target) || new RegExp(`\\b${escaped}\\b`).test(sourceLower);
+    return exact || tokenMatch;
+  });
+  if (mapped) {
+    return mapped[1];
+  }
+
+  if (sourceLower.includes(".")) {
+    return `https://${sanitizeHostLabel(sourceLower)}`;
+  }
+
+  if (target.includes(".")) {
+    return `https://${sanitizeHostLabel(target)}`;
+  }
+
+  if (!isLikelyWebsiteName(target)) {
+    return "";
+  }
+
+  const compact = sanitizeHostLabel(target.replace(/\s+/g, ""));
+  if (!compact) {
+    return "";
+  }
+
+  return `https://${compact}.com`;
 }
 
 function resolveAppName(parameters) {
@@ -172,14 +308,55 @@ async function openUrlInPreferredBrowser(url, browser) {
   await execAsync(openUrlCommand(url));
 }
 
+async function openWebsiteAction(parameters) {
+  const rawTarget = firstNonEmpty(parameters.url, parameters.website, parameters.site, parameters.query, parameters.app_name, parameters.app);
+  const url = buildWebsiteUrl(rawTarget);
+
+  if (!url) {
+    return {
+      action: "open_website",
+      status: "failed",
+      message: "Ye app ya website nahi mila, thoda clear karo.",
+      details: {
+        target: rawTarget,
+      },
+    };
+  }
+
+  const browser = firstNonEmpty(parameters.browser, parameters.app, parameters.app_name);
+  await openUrlInPreferredBrowser(url, browser);
+  const label = hostToLabel(rawTarget || url);
+
+  return {
+    action: "open_website",
+    status: "completed",
+    message: `${label} browser me open kar raha hoon.`,
+    details: {
+      url,
+      browser: browser || "default",
+      target: rawTarget,
+    },
+  };
+}
+
 async function openAppAction(parameters) {
+  const openTarget = extractOpenTarget(parameters);
   const { key: requestedApp, command } = resolveAppName(parameters);
 
   if (!requestedApp || !command) {
+    const fallbackUrl = buildWebsiteUrl(openTarget);
+    if (fallbackUrl) {
+      return openWebsiteAction({
+        url: fallbackUrl,
+        query: openTarget,
+        browser: parameters.browser,
+      });
+    }
+
     return {
       action: "open_app",
       status: "failed",
-      message: "Application not installed or not recognized",
+      message: "Ye app ya website nahi mila, thoda clear karo.",
       details: {
         app_name: asText(parameters.app_name || parameters.app || parameters.query),
       },
@@ -190,7 +367,7 @@ async function openAppAction(parameters) {
     return {
       action: "open_app",
       status: "failed",
-      message: `${titleCase(requestedApp)} is not installed on your system`,
+      message: `${titleCase(requestedApp)} system me available nahi hai.`,
       details: {
         app_name: requestedApp,
       },
@@ -203,7 +380,7 @@ async function openAppAction(parameters) {
     return {
       action: "open_app",
       status: "failed",
-      message: `${titleCase(requestedApp)} is not installed on your system`,
+      message: `${titleCase(requestedApp)} system me available nahi hai.`,
       details: {
         app_name: requestedApp,
       },
@@ -213,7 +390,7 @@ async function openAppAction(parameters) {
   return {
     action: "open_app",
     status: "completed",
-    message: `Opening ${titleCase(requestedApp)}...`,
+    message: `${titleCase(requestedApp)} open kar raha hoon.`,
     details: { app_name: requestedApp },
   };
 }
@@ -231,8 +408,8 @@ async function playYoutubeAction(parameters) {
     action: "play_youtube",
     status: "completed",
     message: query
-      ? "Opened YouTube search in your browser."
-      : "Opened YouTube in your browser.",
+      ? "Song play kar raha hoon."
+      : "YouTube open kar raha hoon.",
     details: {
       query,
       url: targetUrl,
@@ -258,7 +435,7 @@ async function createFileAction(parameters) {
   return {
     action: "create_file",
     status: "completed",
-    message: `File created: ${filename}`,
+    message: `File create kar di hai: ${filename}`,
     details: {
       filename,
       path: filePath,
@@ -270,8 +447,8 @@ async function createFileAction(parameters) {
 async function getInfoAction(parameters) {
   const query = asText(parameters.query);
   const fallbackMessage = query
-    ? `I could not execute an action, but here is what I found: ${query}`
-    : "I could not execute an action for this command.";
+    ? `Samajh gaya. Ye short answer hai: ${query}`
+    : "Main try kar sakta hoon, thoda aur detail do.";
 
   if (!query || !env.groqApiKey) {
     return {
@@ -308,7 +485,7 @@ async function chatAction(parameters) {
   return {
     action: "chat",
     status: "completed",
-    message: response || "Hello, how can I assist you?",
+    message: response || "Hello, kaise help kar sakta hoon?",
     details: {
       mode: "conversation",
     },
@@ -317,6 +494,7 @@ async function chatAction(parameters) {
 
 const actionMap = {
   open_app: openAppAction,
+  open_website: openWebsiteAction,
   play_youtube: playYoutubeAction,
   create_file: createFileAction,
   get_info: getInfoAction,
