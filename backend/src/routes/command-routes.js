@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { postCommand } from "../controllers/command-controller.js";
+import { postCommand } from "../controllers/commandController.js";
 
 const commandRouter = Router();
 
