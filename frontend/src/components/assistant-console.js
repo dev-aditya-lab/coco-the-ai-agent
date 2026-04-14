@@ -10,7 +10,7 @@ import StatusIndicator from "@/components/status-indicator";
 import TerminalView from "@/components/terminal-view";
 import VoiceInput from "@/components/VoiceInput";
 import VoiceIndicator from "@/components/voice-indicator";
-import { fetchCommandHistory, requestVoiceAudio, submitCommand } from "@/services/assistant-service";
+import { fetchCommandHistory, submitCommand } from "@/services/assistant-service";
 
 const PHASE = {
   idle: "idle",
@@ -22,28 +22,52 @@ const PHASE = {
 
 const HINGLISH_LANGUAGES = ["en-IN", "hi-IN"];
 
-function pickHinglishVoice(voices) {
+function normalizeTtsLanguage(value) {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  if (!normalized) {
+    return "hi-IN";
+  }
+
+  if (normalized.toLowerCase() === "in-hi") {
+    return "hi-IN";
+  }
+
+  return normalized;
+}
+
+const BROWSER_TTS_LANGUAGE = normalizeTtsLanguage(process.env.NEXT_PUBLIC_TTS_LANG || "hi-IN");
+const BROWSER_TTS_GENDER = (process.env.NEXT_PUBLIC_TTS_GENDER || "female").toLowerCase() === "male"
+  ? "male"
+  : "female";
+
+function pickHinglishVoice(voices, preferredGender = "female", preferredLanguage = "hi-IN") {
   if (!Array.isArray(voices) || voices.length === 0) {
     return null;
   }
 
-  const maleByLang = voices.find(
-    (voice) => HINGLISH_LANGUAGES.includes(voice.lang) && /male|raghav|arjun|veer|kabir|zeeshan/i.test(voice.name)
+  const targetLanguages = [preferredLanguage, ...HINGLISH_LANGUAGES].filter(Boolean);
+  const isMalePreferred = preferredGender === "male";
+  const genderPattern = isMalePreferred
+    ? /male|rahul|aditya|arjun|hemant|karan|madhur/i
+    : /female|zira|swara|kalpana|heera|sneha|priya/i;
+
+  const femaleByLang = voices.find(
+    (voice) => targetLanguages.includes(voice.lang) && genderPattern.test(voice.name)
   );
-  if (maleByLang) {
-    return maleByLang;
+  if (femaleByLang) {
+    return femaleByLang;
   }
 
-  const byLang = voices.find((voice) => HINGLISH_LANGUAGES.includes(voice.lang));
+  const byLang = voices.find((voice) => targetLanguages.includes(voice.lang));
   if (byLang) {
     return byLang;
   }
 
-  const maleByName = voices.find(
-    (voice) => /india|indian|hindi|hinglish/i.test(voice.name) && /male|raghav|arjun|veer|kabir|zeeshan/i.test(voice.name)
+  const femaleByName = voices.find(
+    (voice) => /india|indian|hindi|hinglish/i.test(voice.name) && genderPattern.test(voice.name)
   );
-  if (maleByName) {
-    return maleByName;
+  if (femaleByName) {
+    return femaleByName;
   }
 
   const byName = voices.find((voice) => /india|indian|hindi|hinglish/i.test(voice.name));
@@ -51,65 +75,12 @@ function pickHinglishVoice(voices) {
     return byName;
   }
 
-  const maleAny = voices.find((voice) => /male|raghav|arjun|veer|kabir|zeeshan/i.test(voice.name));
-  if (maleAny) {
-    return maleAny;
+  const femaleAny = voices.find((voice) => genderPattern.test(voice.name));
+  if (femaleAny) {
+    return femaleAny;
   }
 
   return byName || null;
-}
-
-function toHindiSpeechText(text) {
-  const safe = typeof text === "string" ? text.trim() : "";
-  if (!safe) {
-    return "";
-  }
-
-  if (/[\u0900-\u097F]/.test(safe)) {
-    return safe;
-  }
-
-  if (/^hello,?\s*kaise\s+help\s+kar\s+sakta\s+hoon\??$/i.test(safe)) {
-    return "हेलो, कैसे मदद कर सकता हूँ?";
-  }
-
-  if (/^song\s+play\s+kar\s+raha\s+hoon\.?$/i.test(safe)) {
-    return "मैं गाना चला रहा हूँ";
-  }
-
-  if (/^file\s+create\s+ho\s+gayi\s+hai\.?$/i.test(safe)) {
-    return "फ़ाइल बन गई है";
-  }
-
-  const openMatch = safe.match(/^(.+?)\s+open\s+kar\s+raha\s+hoon\.?$/i);
-  if (openMatch?.[1]) {
-    return `मैं ${openMatch[1].trim()} खोल रहा हूँ`;
-  }
-
-  const playMatch = safe.match(/^(.+?)\s+play\s+kar\s+raha\s+hoon\.?$/i);
-  if (playMatch?.[1]) {
-    return `मैं ${playMatch[1].trim()} चला रहा हूँ`;
-  }
-
-  return safe
-    .replace(/\bhello\b/gi, "हेलो")
-    .replace(/\bkaise\b/gi, "कैसे")
-    .replace(/\bhelp\b/gi, "मदद")
-    .replace(/\bmain\b/gi, "मैं")
-    .replace(/\bmein\b|\bme\b/gi, "में")
-    .replace(/\bopen\b/gi, "खोल")
-    .replace(/\bplay\b/gi, "चला")
-    .replace(/\bcreate\b/gi, "बना")
-    .replace(/\bfile\b/gi, "फ़ाइल")
-    .replace(/\bsong\b/gi, "गाना")
-    .replace(/\bkar\b/gi, "कर")
-    .replace(/\braha\b/gi, "रहा")
-    .replace(/\brahi\b/gi, "रही")
-    .replace(/\bhoon\b/gi, "हूँ")
-    .replace(/\bhai\b/gi, "है")
-    .replace(/\bgayi\b/gi, "गई")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 function userFriendlyStepError(action) {
@@ -221,7 +192,6 @@ export default function AssistantConsole() {
   const [selectedVoice, setSelectedVoice] = useState(null);
   const [voiceStatusText, setVoiceStatusText] = useState("");
   const speechRef = useRef(null);
-  const audioRef = useRef(null);
   const lastSpokenKeyRef = useRef("");
 
   const showStatus = isLoading || phase === PHASE.completed || phase === PHASE.error;
@@ -237,7 +207,7 @@ export default function AssistantConsole() {
 
     const syncVoices = () => {
       const voices = window.speechSynthesis.getVoices();
-      const preferred = pickHinglishVoice(voices);
+      const preferred = pickHinglishVoice(voices, BROWSER_TTS_GENDER, BROWSER_TTS_LANGUAGE);
       setSelectedVoice(preferred);
     };
 
@@ -272,13 +242,6 @@ export default function AssistantConsole() {
       if (typeof window !== "undefined" && window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
-
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-        audioRef.current.src = "";
-        audioRef.current = null;
-      }
     };
 
     const playBrowserTts = () => {
@@ -289,9 +252,8 @@ export default function AssistantConsole() {
         return;
       }
 
-      const spokenText = toHindiSpeechText(response.finalMessage);
-      const utterance = new SpeechSynthesisUtterance(spokenText || response.finalMessage);
-      utterance.lang = selectedVoice?.lang || "hi-IN";
+      const utterance = new SpeechSynthesisUtterance(response.finalMessage);
+      utterance.lang = selectedVoice?.lang || BROWSER_TTS_LANGUAGE;
       utterance.rate = 0.95;
       utterance.pitch = 1;
 
@@ -327,59 +289,9 @@ export default function AssistantConsole() {
       window.speechSynthesis.speak(utterance);
     };
 
-    const playElevenLabs = async () => {
-      setVoiceStatusText("Speaking with ElevenLabs...");
-
-      try {
-        const voiceData = await requestVoiceAudio(response.finalMessage, { language: "hi-IN" });
-
-        const suffix = voiceData.voiceId ? ` (${voiceData.voiceId.slice(0, 6)})` : "";
-        setVoiceStatusText(
-          voiceData.cached ? `Speaking (cached)${suffix}...` : `Speaking with ElevenLabs${suffix}...`
-        );
-
-        if (cancelled) {
-          return;
-        }
-
-        const audio = new Audio(`data:${voiceData.mimeType};base64,${voiceData.audioBase64}`);
-        audioRef.current = audio;
-
-        audio.onplay = () => {
-          if (cancelled) {
-            return;
-          }
-          setIsSpeaking(true);
-        };
-
-        audio.onended = () => {
-          if (cancelled) {
-            return;
-          }
-          setIsSpeaking(false);
-          setVoiceStatusText("");
-        };
-
-        audio.onerror = () => {
-          if (cancelled) {
-            return;
-          }
-          setVoiceStatusText("Using basic voice...");
-          playBrowserTts();
-        };
-
-        await audio.play();
-      } catch {
-        if (cancelled) {
-          return;
-        }
-        setVoiceStatusText("ElevenLabs unavailable, using basic voice...");
-        playBrowserTts();
-      }
-    };
-
     stopAllSpeech();
-    playElevenLabs();
+    setVoiceStatusText(`Speaking (${BROWSER_TTS_GENDER})...`);
+    playBrowserTts();
 
     return () => {
       cancelled = true;
@@ -460,13 +372,6 @@ export default function AssistantConsole() {
     if (typeof window !== "undefined") {
       if (window.speechSynthesis) {
         window.speechSynthesis.cancel();
-      }
-
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-        audioRef.current.src = "";
-        audioRef.current = null;
       }
     }
 
