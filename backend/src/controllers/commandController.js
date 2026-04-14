@@ -1,5 +1,6 @@
 import { requestActionPlan } from "../services/aiService.js";
 import { executeAction } from "../services/actionHandler.js";
+import { getRecentCommands, saveCommandHistory } from "../services/historyService.js";
 
 const ALLOWED_ACTIONS = new Set(["open_app", "play_youtube", "create_file", "get_info"]);
 
@@ -59,6 +60,17 @@ function validateActionPayload(payload, originalCommand) {
   };
 }
 
+function toHistoryRecord(command, actionPlan, execution) {
+  return {
+    command,
+    action: actionPlan.action,
+    parameters: actionPlan.parameters,
+    response: typeof execution?.message === "string" ? execution.message : "",
+    status: execution?.status === "failed" ? "failure" : "success",
+    timestamp: new Date(),
+  };
+}
+
 export async function postCommand(req, res) {
   const command = normalizeString(req.body?.command);
 
@@ -81,6 +93,10 @@ export async function postCommand(req, res) {
     const actionPlan = validateActionPayload(parsedJson, command);
     const execution = await executeAction(actionPlan);
 
+    saveCommandHistory(toHistoryRecord(command, actionPlan, execution)).catch((error) => {
+      console.error("[history] save_failed", error);
+    });
+
     return res.status(200).json({
       success: true,
       data: actionPlan,
@@ -93,10 +109,36 @@ export async function postCommand(req, res) {
     const fallback = buildFallback(command, "parse_or_provider_error");
     const execution = await executeAction(fallback);
 
+    saveCommandHistory(toHistoryRecord(command, fallback, execution)).catch((saveError) => {
+      console.error("[history] save_failed", saveError);
+    });
+
     return res.status(200).json({
       success: true,
       data: fallback,
       execution,
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
+export async function getHistory(req, res) {
+  const requestedLimit = req.query.limit;
+
+  try {
+    const history = await getRecentCommands(requestedLimit || 10);
+
+    return res.status(200).json({
+      success: true,
+      data: history,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("[history] fetch_failed", error);
+
+    return res.status(200).json({
+      success: true,
+      data: [],
       timestamp: new Date().toISOString(),
     });
   }
