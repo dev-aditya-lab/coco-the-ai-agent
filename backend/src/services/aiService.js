@@ -59,7 +59,20 @@ Allowed actions:
 - play_youtube
 - create_file
 - get_info
+- get_user_info
 - chat
+
+Name lookup intent rules:
+- If user asks for their own name in any wording variation, use get_user_info.
+- Examples: "mera naam kya hai", "mera naam batao", "mera naam kya tha", "what is my name", "tell my name", "achha mera naam batao", "mera naam kya hai abhi", "mera naam kya hai batao"
+
+get_user_info format:
+{
+  "action": "get_user_info",
+  "parameters": {
+    "type": "name"
+  }
+}
 
 Website decision rules:
 - Services like YouTube, Google, Gmail, Instagram, LinkedIn are websites by default.

@@ -27,13 +27,89 @@ function pickHinglishVoice(voices) {
     return null;
   }
 
+  const maleByLang = voices.find(
+    (voice) => HINGLISH_LANGUAGES.includes(voice.lang) && /male|raghav|arjun|veer|kabir|zeeshan/i.test(voice.name)
+  );
+  if (maleByLang) {
+    return maleByLang;
+  }
+
   const byLang = voices.find((voice) => HINGLISH_LANGUAGES.includes(voice.lang));
   if (byLang) {
     return byLang;
   }
 
+  const maleByName = voices.find(
+    (voice) => /india|indian|hindi|hinglish/i.test(voice.name) && /male|raghav|arjun|veer|kabir|zeeshan/i.test(voice.name)
+  );
+  if (maleByName) {
+    return maleByName;
+  }
+
   const byName = voices.find((voice) => /india|indian|hindi|hinglish/i.test(voice.name));
+  if (byName) {
+    return byName;
+  }
+
+  const maleAny = voices.find((voice) => /male|raghav|arjun|veer|kabir|zeeshan/i.test(voice.name));
+  if (maleAny) {
+    return maleAny;
+  }
+
   return byName || null;
+}
+
+function toHindiSpeechText(text) {
+  const safe = typeof text === "string" ? text.trim() : "";
+  if (!safe) {
+    return "";
+  }
+
+  if (/[\u0900-\u097F]/.test(safe)) {
+    return safe;
+  }
+
+  if (/^hello,?\s*kaise\s+help\s+kar\s+sakta\s+hoon\??$/i.test(safe)) {
+    return "हेलो, कैसे मदद कर सकता हूँ?";
+  }
+
+  if (/^song\s+play\s+kar\s+raha\s+hoon\.?$/i.test(safe)) {
+    return "मैं गाना चला रहा हूँ";
+  }
+
+  if (/^file\s+create\s+ho\s+gayi\s+hai\.?$/i.test(safe)) {
+    return "फ़ाइल बन गई है";
+  }
+
+  const openMatch = safe.match(/^(.+?)\s+open\s+kar\s+raha\s+hoon\.?$/i);
+  if (openMatch?.[1]) {
+    return `मैं ${openMatch[1].trim()} खोल रहा हूँ`;
+  }
+
+  const playMatch = safe.match(/^(.+?)\s+play\s+kar\s+raha\s+hoon\.?$/i);
+  if (playMatch?.[1]) {
+    return `मैं ${playMatch[1].trim()} चला रहा हूँ`;
+  }
+
+  return safe
+    .replace(/\bhello\b/gi, "हेलो")
+    .replace(/\bkaise\b/gi, "कैसे")
+    .replace(/\bhelp\b/gi, "मदद")
+    .replace(/\bmain\b/gi, "मैं")
+    .replace(/\bmein\b|\bme\b/gi, "में")
+    .replace(/\bopen\b/gi, "खोल")
+    .replace(/\bplay\b/gi, "चला")
+    .replace(/\bcreate\b/gi, "बना")
+    .replace(/\bfile\b/gi, "फ़ाइल")
+    .replace(/\bsong\b/gi, "गाना")
+    .replace(/\bkar\b/gi, "कर")
+    .replace(/\braha\b/gi, "रहा")
+    .replace(/\brahi\b/gi, "रही")
+    .replace(/\bhoon\b/gi, "हूँ")
+    .replace(/\bhai\b/gi, "है")
+    .replace(/\bgayi\b/gi, "गई")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function userFriendlyStepError(action) {
@@ -213,7 +289,8 @@ export default function AssistantConsole() {
         return;
       }
 
-      const utterance = new SpeechSynthesisUtterance(response.finalMessage);
+      const spokenText = toHindiSpeechText(response.finalMessage);
+      const utterance = new SpeechSynthesisUtterance(spokenText || response.finalMessage);
       utterance.lang = selectedVoice?.lang || "hi-IN";
       utterance.rate = 0.95;
       utterance.pitch = 1;
@@ -256,8 +333,9 @@ export default function AssistantConsole() {
       try {
         const voiceData = await requestVoiceAudio(response.finalMessage, { language: "hi-IN" });
 
+        const suffix = voiceData.voiceId ? ` (${voiceData.voiceId.slice(0, 6)})` : "";
         setVoiceStatusText(
-          voiceData.cached ? "Speaking (cached)..." : "Speaking with ElevenLabs..."
+          voiceData.cached ? `Speaking (cached)${suffix}...` : `Speaking with ElevenLabs${suffix}...`
         );
 
         if (cancelled) {
@@ -295,7 +373,7 @@ export default function AssistantConsole() {
         if (cancelled) {
           return;
         }
-        setVoiceStatusText("Using basic voice...");
+        setVoiceStatusText("ElevenLabs unavailable, using basic voice...");
         playBrowserTts();
       }
     };

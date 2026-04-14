@@ -82,5 +82,6 @@ export async function requestVoiceAudio(text, options = {}) {
     audioBase64: data.audioBase64,
     cached: Boolean(data.cached),
     language: data.language || options.language || "hi-IN",
+    voiceId: typeof data.voiceId === "string" ? data.voiceId : "",
   };
 }

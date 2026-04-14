@@ -1,4 +1,5 @@
 import { env } from "../config/env.js";
+import { convertHinglishToHindiTts } from "./hinglishToHindiService.js";
 
 const ELEVENLABS_BASE_URL = "https://api.elevenlabs.io/v1/text-to-speech";
 const voiceCache = new Map();
@@ -40,10 +41,12 @@ function getCachedAudio(cacheKey) {
 export async function synthesizeWithElevenLabs(inputText, options = {}) {
   const text = normalizeText(inputText);
   const language = normalizeLanguage(options.language);
+  const isHindi = language.toLowerCase().startsWith("hi");
+  const normalizedText = isHindi ? convertHinglishToHindiTts(text) : text;
   const voiceId = pickVoiceId(language);
   const modelId = env.elevenLabsModelId;
 
-  if (!text) {
+  if (!normalizedText) {
     const error = new Error("Text is required for voice synthesis.");
     error.statusCode = 400;
     throw error;
@@ -61,7 +64,7 @@ export async function synthesizeWithElevenLabs(inputText, options = {}) {
     throw error;
   }
 
-  const cacheKey = `${voiceId}|${modelId}|${language}|${text}`;
+  const cacheKey = `${voiceId}|${modelId}|${language}|${normalizedText}`;
   const cachedAudio = getCachedAudio(cacheKey);
 
   if (cachedAudio) {
@@ -87,7 +90,7 @@ export async function synthesizeWithElevenLabs(inputText, options = {}) {
         "xi-api-key": env.elevenLabsApiKey,
       },
       body: JSON.stringify({
-        text,
+        text: normalizedText,
         model_id: modelId,
         language_code: language,
         voice_settings: {
@@ -123,6 +126,7 @@ export async function synthesizeWithElevenLabs(inputText, options = {}) {
       cached: false,
       language,
       voiceId,
+      normalizedText,
     };
   } finally {
     clearTimeout(timeoutId);

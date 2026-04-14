@@ -479,6 +479,33 @@ async function getInfoAction(parameters) {
   };
 }
 
+async function getUserInfoAction(parameters) {
+  const type = asText(parameters.type).toLowerCase();
+  const name = asText(parameters.name);
+
+  if (type === "name") {
+    return {
+      action: "get_user_info",
+      status: "completed",
+      message: name ? `Tumhara naam ${name} hai` : "Mujhe abhi tak tumhara naam nahi pata",
+      details: {
+        type: "name",
+        found: Boolean(name),
+      },
+    };
+  }
+
+  return {
+    action: "get_user_info",
+    status: "completed",
+    message: "Mujhe abhi tak tumhari yeh info nahi pata",
+    details: {
+      type: type || "unknown",
+      found: false,
+    },
+  };
+}
+
 async function chatAction(parameters) {
   const response = firstNonEmpty(parameters.response, parameters.message);
 
@@ -498,6 +525,7 @@ const actionMap = {
   play_youtube: playYoutubeAction,
   create_file: createFileAction,
   get_info: getInfoAction,
+  get_user_info: getUserInfoAction,
   chat: chatAction,
 };
 

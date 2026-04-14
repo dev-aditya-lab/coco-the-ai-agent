@@ -27,6 +27,7 @@ export async function postVoice(req, res) {
       cached: Boolean(result.cached),
       language: result.language,
       voiceId: result.voiceId,
+      normalizedText: result.normalizedText || text,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Voice generation failed.";

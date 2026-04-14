@@ -3,7 +3,7 @@ import { executeAction } from "../services/actionHandler.js";
 import { env } from "../config/env.js";
 import { getRecentCommands, saveCommandHistory } from "../services/historyService.js";
 
-const ALLOWED_ACTIONS = new Set(["open_app", "open_website", "play_youtube", "create_file", "get_info", "chat"]);
+const ALLOWED_ACTIONS = new Set(["open_app", "open_website", "play_youtube", "create_file", "get_info", "get_user_info", "chat"]);
 const MAX_CONVERSATION_MESSAGES = 10;
 const conversationState = {
   name: "",
@@ -35,17 +35,41 @@ function extractNameFromText(text) {
     return "";
   }
 
-  const match = normalized.match(/\b(?:i am|i'm|my name is)\s+([a-z][a-z\s'-]{1,30})/i);
-  if (!match?.[1]) {
+  const englishMatch = normalized.match(/\b(?:i am|i'm|my name is)\s+([a-z][a-z\s'-]{1,30})/i);
+  const hindiMatch = normalized.match(/\bmera naam\s+([a-z][a-z\s'-]{1,30})\s+hai\b/i);
+  const raw = englishMatch?.[1] || hindiMatch?.[1] || "";
+
+  if (!raw) {
     return "";
   }
 
-  const candidate = match[1].trim().split(" ").slice(0, 2).join(" ");
+  const candidate = raw.trim().split(" ").slice(0, 2).join(" ");
+  const blockedNameTokens = new Set(["batao", "batado", "kya", "hai", "abhi", "tha", "bolo"]);
+  const candidateTokens = candidate.toLowerCase().split(" ").filter(Boolean);
+
+  if (candidateTokens.some((token) => blockedNameTokens.has(token))) {
+    return "";
+  }
+
   return candidate
     .split(" ")
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
     .join(" ");
+}
+
+function isNameLookupIntent(text) {
+  const normalized = normalizeString(text).toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return (
+    /\bwhat\s+is\s+my\s+name\b/.test(normalized)
+    || /\btell\s+my\s+name\b/.test(normalized)
+    || /\bmy\s+name\b/.test(normalized)
+    || /\bmera\s+naam\b/.test(normalized)
+  ) && !/\bmy\s+name\s+is\b|\bmera\s+naam\s+[a-z][a-z\s'-]{0,30}\s+hai\b/.test(normalized);
 }
 
 function isGreetingMessage(text) {
@@ -173,6 +197,10 @@ function normalizeStep(stepPayload, originalCommand, source = "groq") {
 
   if (action === "get_info" && !parameters.query) {
     parameters.query = normalizeString(originalCommand);
+  }
+
+  if (action === "get_user_info" && !parameters.type) {
+    parameters.type = "name";
   }
 
   return {
@@ -344,18 +372,36 @@ export async function postCommand(req, res) {
   console.info("[command] input", { command });
 
   const extractedName = extractNameFromText(command);
-  if (extractedName) {
+  if (extractedName && !isNameLookupIntent(command)) {
     conversationState.name = extractedName;
   }
 
   try {
-    const rawResponse = await routeActionPlan(command, conversationState.history);
-    console.info("[command] ai_response", { rawResponse });
+    let actionSteps;
 
-    const parsedJson = parseActionJson(rawResponse);
-    console.info("[command] parsed_json", parsedJson);
+    if (isNameLookupIntent(command)) {
+      actionSteps = [
+        {
+          action: "get_user_info",
+          parameters: {
+            type: "name",
+            name: conversationState.name,
+          },
+          meta: {
+            source: "rule_name_lookup",
+          },
+        },
+      ];
+    } else {
+      const rawResponse = await routeActionPlan(command, conversationState.history);
+      console.info("[command] ai_response", { rawResponse });
 
-    const actionSteps = validateActionPayload(parsedJson, command);
+      const parsedJson = parseActionJson(rawResponse);
+      console.info("[command] parsed_json", parsedJson);
+
+      actionSteps = validateActionPayload(parsedJson, command);
+    }
+
     const stepsExecuted = await executeSteps(actionSteps, command);
     const finalMessage = buildFinalMessage(stepsExecuted);
 
