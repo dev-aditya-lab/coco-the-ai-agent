@@ -4,22 +4,83 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import puppeteer from "puppeteer";
 import { env } from "../config/env.js";
+import { APP_ALIASES, APP_REGISTRY } from "../config/appRegistry.js";
 
 const execAsync = promisify(exec);
 
-const APP_COMMANDS_WINDOWS = {
-  chrome: "start chrome",
-  "google chrome": "start chrome",
-  vscode: "start code",
-  "visual studio code": "start code",
-  notepad: "start notepad",
-  calculator: "start calc",
-};
+const FILLER_PATTERNS = [
+  /\bcoco\b/g,
+  /\bjarvis\b/g,
+  /\bplease\b/g,
+  /\bkholna\b/g,
+  /\bkhol\b/g,
+  /\bkhol do\b/g,
+  /\bchalao\b/g,
+  /\bopen karo\b/g,
+  /\bopen\b/g,
+  /\bkaro\b/g,
+  /\bye\b/g,
+  /\bapp\b/g,
+  /\blaunch\b/g,
+  /\bstart\b/g,
+];
 
 const ALLOWED_FILE_EXTENSIONS = new Set([".txt", ".md", ".js", ".ts", ".json", ".py", ".html", ".css"]);
 
 function asText(value) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function titleCase(value) {
+  return value
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function normalizeAppCandidate(value) {
+  let normalized = asText(value).toLowerCase();
+
+  normalized = normalized.replace(/[.,!?]/g, " ");
+
+  for (const pattern of FILLER_PATTERNS) {
+    normalized = normalized.replace(pattern, " ");
+  }
+
+  normalized = normalized.replace(/\s+/g, " ").trim();
+
+  for (const [alias, canonical] of Object.entries(APP_ALIASES)) {
+    if (normalized === alias) {
+      return canonical;
+    }
+  }
+
+  return normalized;
+}
+
+function resolveAppName(parameters) {
+  const appName = normalizeAppCandidate(parameters.app_name || parameters.app || "");
+  const queryName = normalizeAppCandidate(parameters.query || "");
+
+  const candidate = appName || queryName;
+  if (!candidate) {
+    return { key: "", command: "" };
+  }
+
+  if (APP_REGISTRY[candidate]) {
+    return { key: candidate, command: APP_REGISTRY[candidate] };
+  }
+
+  const partialKey = Object.keys(APP_REGISTRY).find(
+    (key) => key.includes(candidate) || candidate.includes(key)
+  );
+
+  if (partialKey) {
+    return { key: partialKey, command: APP_REGISTRY[partialKey] };
+  }
+
+  return { key: "", command: "" };
 }
 
 function sanitizeFilename(rawFilename) {
@@ -40,27 +101,48 @@ function sanitizeFilename(rawFilename) {
 }
 
 async function openAppAction(parameters) {
-  const requestedApp = asText(parameters.app).toLowerCase();
-  if (!requestedApp) {
-    throw new Error("Missing app parameter for open_app.");
+  const { key: requestedApp, command } = resolveAppName(parameters);
+
+  if (!requestedApp || !command) {
+    return {
+      action: "open_app",
+      status: "failed",
+      message: "Application not installed or not recognized",
+      details: {
+        app_name: asText(parameters.app_name || parameters.app || parameters.query),
+      },
+    };
   }
 
   if (process.platform !== "win32") {
-    throw new Error("open_app currently supports Windows only.");
+    return {
+      action: "open_app",
+      status: "failed",
+      message: `${titleCase(requestedApp)} is not installed on your system`,
+      details: {
+        app_name: requestedApp,
+      },
+    };
   }
 
-  const command = APP_COMMANDS_WINDOWS[requestedApp];
-  if (!command) {
-    throw new Error(`Unsupported app: ${requestedApp}`);
+  try {
+    await execAsync(command);
+  } catch {
+    return {
+      action: "open_app",
+      status: "failed",
+      message: `${titleCase(requestedApp)} is not installed on your system`,
+      details: {
+        app_name: requestedApp,
+      },
+    };
   }
-
-  await execAsync(command);
 
   return {
     action: "open_app",
     status: "completed",
-    message: `Opened ${requestedApp}.`,
-    details: { app: requestedApp },
+    message: `Opening ${titleCase(requestedApp)}...`,
+    details: { app_name: requestedApp },
   };
 }
 
