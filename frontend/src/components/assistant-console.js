@@ -1,12 +1,15 @@
 'use client';
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Volume2, VolumeX } from "lucide-react";
 import AssistantLayout from "@/components/assistant-layout";
 import CommandInput from "@/components/command-input";
 import CommandSuggestions from "@/components/command-suggestions";
+import HistoryPanel from "@/components/HistoryPanel";
 import Loader from "@/components/loader";
 import ResponseBox from "@/components/response-box";
-import { submitCommand } from "@/services/assistant-service";
+import VoiceInput from "@/components/VoiceInput";
+import { fetchCommandHistory, submitCommand } from "@/services/assistant-service";
 
 const PHASE = {
   idle: "idle",
@@ -118,6 +121,11 @@ export default function AssistantConsole() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [phase, setPhase] = useState(PHASE.idle);
+  const [history, setHistory] = useState([]);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const speechRef = useRef(null);
 
   const showLoader = isLoading || phase === PHASE.completed;
 
@@ -132,6 +140,43 @@ export default function AssistantConsole() {
       details: step.message,
     }));
   }, [response]);
+
+  useEffect(() => {
+    refreshHistory();
+  }, []);
+
+  useEffect(() => {
+    if (!response?.finalMessage) {
+      return;
+    }
+
+    if (isMuted || typeof window === "undefined" || !window.speechSynthesis) {
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(response.finalMessage);
+    utterance.rate = 1;
+    utterance.pitch = 1;
+
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+
+    speechRef.current = utterance;
+    window.speechSynthesis.speak(utterance);
+
+    return () => {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+    };
+  }, [response, isMuted]);
+
+  async function refreshHistory() {
+    const records = await fetchCommandHistory(10);
+    setHistory(Array.isArray(records) ? records : []);
+  }
 
   async function runCommand(nextCommand) {
     const trimmedCommand = nextCommand.trim();
@@ -153,6 +198,7 @@ export default function AssistantConsole() {
       const nextResponse = normalizeResponse(rawResponse, trimmedCommand);
       setResponse(nextResponse);
       setPhase(PHASE.completed);
+      refreshHistory();
     } catch {
       setError("Could not process request.");
       setPhase(PHASE.error);
@@ -182,6 +228,23 @@ export default function AssistantConsole() {
     runCommand(commandValue);
   }
 
+  function handleVoiceTranscript(transcript) {
+    setCommand(transcript);
+  }
+
+  function handleVoiceError(message) {
+    setError(message || "Voice input failed. Please type your command.");
+  }
+
+  function toggleMute() {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+
+    setIsSpeaking(false);
+    setIsMuted((prev) => !prev);
+  }
+
   return (
     <AssistantLayout>
       <CommandInput
@@ -191,7 +254,38 @@ export default function AssistantConsole() {
         onCommandKeyDown={handleCommandKeyDown}
         onSubmit={handleSubmit}
       />
+      <div className="flex flex-wrap items-center gap-3">
+        <VoiceInput
+          disabled={isLoading}
+          onError={handleVoiceError}
+          onListeningChange={setIsListening}
+          onTranscript={handleVoiceTranscript}
+        />
+
+        <button
+          type="button"
+          onClick={toggleMute}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/12 bg-black/35 text-zinc-300 transition hover:border-cyan-300/35 hover:text-cyan-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40"
+          aria-label={isMuted ? "Unmute speech" : "Mute speech"}
+        >
+          {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+        </button>
+
+        {isListening ? (
+          <span className="rounded-full border border-red-300/30 bg-red-300/10 px-3 py-1 text-xs uppercase tracking-[0.22em] text-red-200">
+            Listening...
+          </span>
+        ) : null}
+
+        {isSpeaking ? (
+          <span className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-xs uppercase tracking-[0.22em] text-cyan-100">
+            Speaking...
+          </span>
+        ) : null}
+      </div>
+
       <CommandSuggestions isLoading={isLoading} onUseCommand={handleSuggestion} />
+      <HistoryPanel history={history} isLoading={isLoading} onRefresh={refreshHistory} onReuse={handleSuggestion} />
       <Loader isVisible={showLoader} phase={phase} />
       <ResponseBox error={error} logs={logs} response={response} />
     </AssistantLayout>

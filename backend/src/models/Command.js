@@ -26,12 +26,9 @@ const commandSchema = new mongoose.Schema(
       enum: ["success", "failure"],
       required: true,
     },
-    timestamp: {
-      type: Date,
-      default: Date.now,
-    },
   },
   {
+    timestamps: { createdAt: true, updatedAt: false },
     versionKey: false,
   }
 );

@@ -107,7 +107,6 @@ function toHistoryRecord(command, actionPlan, execution) {
     parameters: actionPlan.parameters,
     response: typeof execution?.message === "string" ? execution.message : "",
     status: execution?.status === "failed" ? "failure" : "success",
-    timestamp: new Date(),
   };
 }
 

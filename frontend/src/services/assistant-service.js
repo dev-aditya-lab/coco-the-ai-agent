@@ -31,3 +31,23 @@ export async function submitCommand(command) {
     throw new Error("Could not process request.");
   }
 }
+
+export async function fetchCommandHistory(limit = 10) {
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/history?limit=${limit}`);
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const data = await response.json().catch(() => null);
+
+    if (!data || !Array.isArray(data.data)) {
+      return [];
+    }
+
+    return data.data;
+  } catch {
+    return [];
+  }
+}

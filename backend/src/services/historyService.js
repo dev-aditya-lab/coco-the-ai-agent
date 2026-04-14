@@ -18,7 +18,7 @@ export async function getRecentCommands(limit = 10) {
   const safeLimit = clampLimit(limit);
 
   return Command.find({})
-    .sort({ timestamp: -1 })
+    .sort({ createdAt: -1 })
     .limit(safeLimit)
     .lean();
 }
