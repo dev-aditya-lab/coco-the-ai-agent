@@ -20,6 +20,22 @@ const PHASE = {
   error: "error",
 };
 
+const HINGLISH_LANGUAGES = ["en-IN", "hi-IN"];
+
+function pickHinglishVoice(voices) {
+  if (!Array.isArray(voices) || voices.length === 0) {
+    return null;
+  }
+
+  const byLang = voices.find((voice) => HINGLISH_LANGUAGES.includes(voice.lang));
+  if (byLang) {
+    return byLang;
+  }
+
+  const byName = voices.find((voice) => /india|indian|hindi|hinglish/i.test(voice.name));
+  return byName || null;
+}
+
 function userFriendlyStepError(action) {
   if (action === "open_app") {
     return "Failed to open application";
@@ -126,12 +142,32 @@ export default function AssistantConsole() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [selectedVoice, setSelectedVoice] = useState(null);
   const speechRef = useRef(null);
 
   const showStatus = isLoading || phase === PHASE.completed || phase === PHASE.error;
 
   useEffect(() => {
     refreshHistory();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.speechSynthesis) {
+      return;
+    }
+
+    const syncVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      const preferred = pickHinglishVoice(voices);
+      setSelectedVoice(preferred);
+    };
+
+    syncVoices();
+    window.speechSynthesis.onvoiceschanged = syncVoices;
+
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null;
+    };
   }, []);
 
   useEffect(() => {
@@ -146,8 +182,13 @@ export default function AssistantConsole() {
     window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(response.finalMessage);
-    utterance.rate = 1;
+    utterance.lang = selectedVoice?.lang || "en-IN";
+    utterance.rate = 0.95;
     utterance.pitch = 1;
+
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+    }
 
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
@@ -160,7 +201,7 @@ export default function AssistantConsole() {
       window.speechSynthesis.cancel();
       setIsSpeaking(false);
     };
-  }, [response, isMuted]);
+  }, [response, isMuted, selectedVoice]);
 
   async function refreshHistory() {
     const records = await fetchCommandHistory(10);
@@ -217,8 +258,12 @@ export default function AssistantConsole() {
     runCommand(commandValue);
   }
 
-  function handleVoiceTranscript(transcript) {
+  function handleVoiceTranscript(transcript, options = {}) {
     setCommand(transcript);
+
+    if (options.autoSubmit !== false) {
+      runCommand(transcript);
+    }
   }
 
   function handleVoiceError(message) {

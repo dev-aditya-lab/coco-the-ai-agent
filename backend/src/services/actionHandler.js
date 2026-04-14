@@ -2,9 +2,9 @@ import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import puppeteer from "puppeteer";
 import { env } from "../config/env.js";
 import { APP_ALIASES, APP_REGISTRY } from "../config/appRegistry.js";
+import { requestInfoText } from "./aiService.js";
 
 const execAsync = promisify(exec);
 
@@ -100,6 +100,78 @@ function sanitizeFilename(rawFilename) {
   return safeName;
 }
 
+function firstNonEmpty(...values) {
+  for (const value of values) {
+    const text = asText(value);
+    if (text) {
+      return text;
+    }
+  }
+
+  return "";
+}
+
+function extractYoutubeQuery(parameters) {
+  return firstNonEmpty(
+    parameters.query,
+    parameters.search,
+    parameters.song,
+    parameters.video,
+    parameters.prompt,
+    parameters.text,
+    parameters.topic
+  );
+}
+
+function extractFilename(parameters) {
+  const direct = firstNonEmpty(
+    parameters.filename,
+    parameters.file_name,
+    parameters.file,
+    parameters.name,
+    parameters.path
+  );
+
+  if (direct) {
+    return direct;
+  }
+
+  const query = firstNonEmpty(parameters.query, parameters.prompt, parameters.text);
+  if (!query) {
+    return "";
+  }
+
+  const match = query.match(/([a-zA-Z0-9._-]+\.(txt|md|js|ts|json|py|html|css))\b/i);
+  return match ? match[1] : "";
+}
+
+function extractFileContent(parameters) {
+  return firstNonEmpty(parameters.content, parameters.code, parameters.body, parameters.text);
+}
+
+function openUrlCommand(url) {
+  if (process.platform === "win32") {
+    return `start "" "${url}"`;
+  }
+
+  if (process.platform === "darwin") {
+    return `open "${url}"`;
+  }
+
+  return `xdg-open "${url}"`;
+}
+
+async function openUrlInPreferredBrowser(url, browser) {
+  const preferredBrowser = asText(browser).toLowerCase();
+
+  if (process.platform === "win32" && preferredBrowser.includes("chrome")) {
+    await execAsync(`start chrome "${url}"`);
+    return;
+  }
+
+  await execAsync(openUrlCommand(url));
+}
+
 async function openAppAction(parameters) {
   const { key: requestedApp, command } = resolveAppName(parameters);
 
@@ -147,61 +219,35 @@ async function openAppAction(parameters) {
 }
 
 async function playYoutubeAction(parameters) {
-  const query = asText(parameters.query);
-  if (!query) {
-    throw new Error("Missing query parameter for play_youtube.");
-  }
+  const query = extractYoutubeQuery(parameters);
+  const browser = firstNonEmpty(parameters.browser, parameters.app, parameters.app_name);
+  const targetUrl = query
+    ? `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`
+    : "https://www.youtube.com";
 
-  const browser = await puppeteer.launch({
-    headless: env.puppeteerHeadless,
-    defaultViewport: null,
-  });
+  await openUrlInPreferredBrowser(targetUrl, browser);
 
-  try {
-    const page = await browser.newPage();
-    const encodedQuery = encodeURIComponent(query);
-    const searchUrl = `https://www.youtube.com/results?search_query=${encodedQuery}`;
-
-    await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
-    await page.waitForSelector("ytd-video-renderer a#thumbnail", { timeout: 15000 });
-
-    const videoUrl = await page.$eval(
-      "ytd-video-renderer a#thumbnail",
-      (anchor) => anchor.getAttribute("href") || ""
-    );
-
-    if (!videoUrl) {
-      throw new Error("Could not find a playable YouTube result.");
-    }
-
-    await page.goto(`https://www.youtube.com${videoUrl}`, {
-      waitUntil: "domcontentloaded",
-      timeout: 30000,
-    });
-
-    return {
-      action: "play_youtube",
-      status: "completed",
-      message: "Playing first YouTube result.",
-      details: {
-        query,
-        videoUrl: `https://www.youtube.com${videoUrl}`,
-      },
-    };
-  } finally {
-    if (env.puppeteerHeadless) {
-      await browser.close();
-    }
-  }
+  return {
+    action: "play_youtube",
+    status: "completed",
+    message: query
+      ? "Opened YouTube search in your browser."
+      : "Opened YouTube in your browser.",
+    details: {
+      query,
+      url: targetUrl,
+      browser: browser || undefined,
+    },
+  };
 }
 
 async function createFileAction(parameters) {
-  const filename = sanitizeFilename(parameters.filename);
+  const filename = sanitizeFilename(extractFilename(parameters));
   if (!filename) {
     throw new Error("Invalid or missing filename for create_file.");
   }
 
-  const content = typeof parameters.content === "string" ? parameters.content : "";
+  const content = extractFileContent(parameters);
 
   const outputDir = path.resolve(process.cwd(), env.actionOutputDir);
   await mkdir(outputDir, { recursive: true });
@@ -223,13 +269,48 @@ async function createFileAction(parameters) {
 
 async function getInfoAction(parameters) {
   const query = asText(parameters.query);
+  const fallbackMessage = query
+    ? `I could not execute an action, but here is what I found: ${query}`
+    : "I could not execute an action for this command.";
+
+  if (!query || !env.groqApiKey) {
+    return {
+      action: "get_info",
+      status: "completed",
+      message: fallbackMessage,
+      details: {
+        query,
+      },
+    };
+  }
+
+  let answer = "";
+
+  try {
+    answer = await requestInfoText(query);
+  } catch {
+    answer = fallbackMessage;
+  }
 
   return {
     action: "get_info",
     status: "completed",
-    message: "No executable action was selected. Returning informational response.",
+    message: answer || fallbackMessage,
     details: {
       query,
+    },
+  };
+}
+
+async function chatAction(parameters) {
+  const response = firstNonEmpty(parameters.response, parameters.message);
+
+  return {
+    action: "chat",
+    status: "completed",
+    message: response || "Hello, how can I assist you?",
+    details: {
+      mode: "conversation",
     },
   };
 }
@@ -239,6 +320,7 @@ const actionMap = {
   play_youtube: playYoutubeAction,
   create_file: createFileAction,
   get_info: getInfoAction,
+  chat: chatAction,
 };
 
 export async function executeAction(actionPayload) {
