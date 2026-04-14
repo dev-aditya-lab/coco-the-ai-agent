@@ -1,4 +1,5 @@
 import { requestActionPlan } from "../services/aiService.js";
+import { executeAction } from "../services/actionHandler.js";
 
 const ALLOWED_ACTIONS = new Set(["open_app", "play_youtube", "create_file", "get_info"]);
 
@@ -78,20 +79,24 @@ export async function postCommand(req, res) {
     console.info("[command] parsed_json", parsedJson);
 
     const actionPlan = validateActionPayload(parsedJson, command);
+    const execution = await executeAction(actionPlan);
 
     return res.status(200).json({
       success: true,
       data: actionPlan,
+      execution,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
     console.error("[command] processing_error", error);
 
     const fallback = buildFallback(command, "parse_or_provider_error");
+    const execution = await executeAction(fallback);
 
     return res.status(200).json({
       success: true,
       data: fallback,
+      execution,
       timestamp: new Date().toISOString(),
     });
   }
