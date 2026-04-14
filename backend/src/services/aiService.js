@@ -133,7 +133,7 @@ Rules:
 6) For chat action in step format, use parameters.response as the message.
 7) Output must be valid JSON parseable by JSON.parse.`;
 
-const INFO_PROMPT = `You are COCO, created by Aditya Gupta.
+export const INFO_PROMPT = `You are COCO, created by Aditya Gupta.
 Reply in short professional Hinglish in 1-2 lines.
 Do not output JSON.
 Do not use emojis.
@@ -158,7 +158,7 @@ async function callGroq({ messages, responseFormat, maxTokens = 420 }) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: env.groqModel,
+        model: env.qwenModel,
         temperature: 0,
         max_tokens: maxTokens,
         ...(responseFormat ? { response_format: responseFormat } : {}),

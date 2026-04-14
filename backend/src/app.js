@@ -1,6 +1,7 @@
 import express from "express";
 import commandRouter from "./routes/command-routes.js";
 import historyRouter from "./routes/history-routes.js";
+import voiceRouter from "./routes/voice-routes.js";
 import { corsMiddleware } from "./middleware/cors.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import { notFoundHandler } from "./middleware/not-found.js";
@@ -16,6 +17,7 @@ app.get("/health", (req, res) => {
 
 app.use("/api/command", commandRouter);
 app.use("/api/history", historyRouter);
+app.use("/api/voice", voiceRouter);
 app.use(notFoundHandler);
 app.use(errorHandler);
 

@@ -10,7 +10,7 @@ import StatusIndicator from "@/components/status-indicator";
 import TerminalView from "@/components/terminal-view";
 import VoiceInput from "@/components/VoiceInput";
 import VoiceIndicator from "@/components/voice-indicator";
-import { fetchCommandHistory, submitCommand } from "@/services/assistant-service";
+import { fetchCommandHistory, requestVoiceAudio, submitCommand } from "@/services/assistant-service";
 
 const PHASE = {
   idle: "idle",
@@ -143,7 +143,10 @@ export default function AssistantConsole() {
   const [isListening, setIsListening] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState(null);
+  const [voiceStatusText, setVoiceStatusText] = useState("");
   const speechRef = useRef(null);
+  const audioRef = useRef(null);
+  const lastSpokenKeyRef = useRef("");
 
   const showStatus = isLoading || phase === PHASE.completed || phase === PHASE.error;
 
@@ -175,31 +178,136 @@ export default function AssistantConsole() {
       return;
     }
 
-    if (isMuted || typeof window === "undefined" || !window.speechSynthesis) {
+    if (isMuted || typeof window === "undefined") {
       return;
     }
 
-    window.speechSynthesis.cancel();
+    const speakKey = `${response.timestamp || ""}-${response.finalMessage}`;
 
-    const utterance = new SpeechSynthesisUtterance(response.finalMessage);
-    utterance.lang = selectedVoice?.lang || "en-IN";
-    utterance.rate = 0.95;
-    utterance.pitch = 1;
-
-    if (selectedVoice) {
-      utterance.voice = selectedVoice;
+    if (lastSpokenKeyRef.current === speakKey) {
+      return;
     }
 
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
+    lastSpokenKeyRef.current = speakKey;
 
-    speechRef.current = utterance;
-    window.speechSynthesis.speak(utterance);
+    let cancelled = false;
+
+    const stopAllSpeech = () => {
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        audioRef.current.src = "";
+        audioRef.current = null;
+      }
+    };
+
+    const playBrowserTts = () => {
+      if (typeof window === "undefined" || !window.speechSynthesis) {
+        setError("Voice output unavailable. Please check browser audio settings.");
+        setIsSpeaking(false);
+        setVoiceStatusText("");
+        return;
+      }
+
+      const utterance = new SpeechSynthesisUtterance(response.finalMessage);
+      utterance.lang = selectedVoice?.lang || "hi-IN";
+      utterance.rate = 0.95;
+      utterance.pitch = 1;
+
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+      }
+
+      utterance.onstart = () => {
+        if (cancelled) {
+          return;
+        }
+        setIsSpeaking(true);
+      };
+
+      utterance.onend = () => {
+        if (cancelled) {
+          return;
+        }
+        setIsSpeaking(false);
+        setVoiceStatusText("");
+      };
+
+      utterance.onerror = () => {
+        if (cancelled) {
+          return;
+        }
+        setIsSpeaking(false);
+        setVoiceStatusText("");
+        setError("Voice output unavailable. Please check browser audio settings.");
+      };
+
+      speechRef.current = utterance;
+      window.speechSynthesis.speak(utterance);
+    };
+
+    const playElevenLabs = async () => {
+      setVoiceStatusText("Speaking with ElevenLabs...");
+
+      try {
+        const voiceData = await requestVoiceAudio(response.finalMessage, { language: "hi-IN" });
+
+        setVoiceStatusText(
+          voiceData.cached ? "Speaking (cached)..." : "Speaking with ElevenLabs..."
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        const audio = new Audio(`data:${voiceData.mimeType};base64,${voiceData.audioBase64}`);
+        audioRef.current = audio;
+
+        audio.onplay = () => {
+          if (cancelled) {
+            return;
+          }
+          setIsSpeaking(true);
+        };
+
+        audio.onended = () => {
+          if (cancelled) {
+            return;
+          }
+          setIsSpeaking(false);
+          setVoiceStatusText("");
+        };
+
+        audio.onerror = () => {
+          if (cancelled) {
+            return;
+          }
+          setVoiceStatusText("Using basic voice...");
+          playBrowserTts();
+        };
+
+        await audio.play();
+      } catch {
+        if (cancelled) {
+          return;
+        }
+        setVoiceStatusText("Using basic voice...");
+        playBrowserTts();
+      }
+    };
+
+    stopAllSpeech();
+    playElevenLabs();
 
     return () => {
-      window.speechSynthesis.cancel();
+      cancelled = true;
+      stopAllSpeech();
       setIsSpeaking(false);
+      setVoiceStatusText("");
     };
   }, [response, isMuted, selectedVoice]);
 
@@ -271,11 +379,21 @@ export default function AssistantConsole() {
   }
 
   function toggleMute() {
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
+    if (typeof window !== "undefined") {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        audioRef.current.src = "";
+        audioRef.current = null;
+      }
     }
 
     setIsSpeaking(false);
+    setVoiceStatusText("");
     setIsMuted((prev) => !prev);
   }
 
@@ -290,7 +408,7 @@ export default function AssistantConsole() {
       />
       <div className="grid gap-2 rounded-2xl border border-white/10 bg-black/45 p-3 sm:grid-cols-2 sm:p-4">
         <StatusIndicator isVisible={showStatus} phase={phase} />
-        <VoiceIndicator isListening={isListening} isSpeaking={isSpeaking} />
+        <VoiceIndicator isListening={isListening} isSpeaking={isSpeaking} voiceStatusText={voiceStatusText} />
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

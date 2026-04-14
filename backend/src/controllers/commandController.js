@@ -1,4 +1,4 @@
-import { requestActionPlanWithHistory } from "../services/aiService.js";
+import { routeActionPlan } from "../services/modelRouter.js";
 import { executeAction } from "../services/actionHandler.js";
 import { env } from "../config/env.js";
 import { getRecentCommands, saveCommandHistory } from "../services/historyService.js";
@@ -349,7 +349,7 @@ export async function postCommand(req, res) {
   }
 
   try {
-    const rawResponse = await requestActionPlanWithHistory(command, conversationState.history);
+    const rawResponse = await routeActionPlan(command, conversationState.history);
     console.info("[command] ai_response", { rawResponse });
 
     const parsedJson = parseActionJson(rawResponse);

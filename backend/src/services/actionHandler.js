@@ -4,7 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { env } from "../config/env.js";
 import { APP_ALIASES, APP_REGISTRY } from "../config/appRegistry.js";
-import { requestInfoText } from "./aiService.js";
+import { routeInfoResponse } from "./modelRouter.js";
 
 const execAsync = promisify(exec);
 
@@ -464,7 +464,7 @@ async function getInfoAction(parameters) {
   let answer = "";
 
   try {
-    answer = await requestInfoText(query);
+    answer = await routeInfoResponse(query);
   } catch {
     answer = fallbackMessage;
   }

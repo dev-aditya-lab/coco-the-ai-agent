@@ -1,6 +1,6 @@
 'use client';
 
-export default function VoiceIndicator({ isListening, isSpeaking }) {
+export default function VoiceIndicator({ isListening, isSpeaking, voiceStatusText }) {
   if (!isListening && !isSpeaking) {
     return (
       <div className="h-6 text-xs uppercase tracking-[0.24em] text-zinc-600">
@@ -23,7 +23,7 @@ export default function VoiceIndicator({ isListening, isSpeaking }) {
   return (
     <div className="h-6 text-xs uppercase tracking-[0.24em] text-cyan-100" aria-live="polite">
       <span className="inline-flex items-center gap-2">
-        <span>Speaking...</span>
+        <span>{voiceStatusText || "Speaking..."}</span>
         <span className="inline-flex items-end gap-0.5" aria-hidden="true">
           <span className="h-2 w-0.5 animate-wave rounded bg-cyan-300 [animation-delay:0ms]" />
           <span className="h-3 w-0.5 animate-wave rounded bg-cyan-300 [animation-delay:120ms]" />
