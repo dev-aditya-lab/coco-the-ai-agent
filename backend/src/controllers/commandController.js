@@ -10,8 +10,26 @@ const conversationState = {
   history: [],
 };
 
+const HINGLISH_HINT_REGEX = /[\u0900-\u097f]|\b(kya|kaise|kyu|kyon|mera|meri|mujhe|tum|tumhara|aap|aapka|hai|haan|nahi|kar|karo|batao|samjhao|main|mein|abhi|thoda|namaste|haanji|theek|thik)\b/i;
+
 function normalizeString(value) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function detectResponseStyle(command) {
+  const normalized = normalizeString(command);
+  if (!normalized) {
+    return "english";
+  }
+
+  return HINGLISH_HINT_REGEX.test(normalized) ? "bilingual" : "english";
+}
+
+function formatByStyle(style, hinglish, english) {
+  if (style === "bilingual") {
+    return hinglish;
+  }
+  return english;
 }
 
 function appendConversationHistory(role, content) {
@@ -82,53 +100,86 @@ function isIntroMessage(text) {
   return /\b(i am|i'm|my name is)\b/.test(normalized);
 }
 
-function personalizeChatResponse(command, response) {
+function personalizeChatResponse(command, response, responseStyle = "english") {
   const safeResponse = normalizeString(response);
 
   if (isGreetingMessage(command) && !isIntroMessage(command) && conversationState.name) {
-    return `Welcome back ${conversationState.name}, kaise help karu?`;
+    return formatByStyle(
+      responseStyle,
+      `Welcome back ${conversationState.name}, kaise help karu?`,
+      `Welcome back ${conversationState.name}. How can I help?`
+    );
   }
 
-  return safeResponse || buildConversationResponse(command);
+  return safeResponse || buildConversationResponse(command, responseStyle);
 }
 
-function buildConversationResponse(command) {
+function buildConversationResponse(command, responseStyle = "english") {
   const normalized = normalizeString(command).toLowerCase();
   const extractedName = extractNameFromText(command);
 
   if (/\bwho are you\b/.test(normalized)) {
-    return "Main COCO hoon, ek AI assistant jo Aditya Gupta ne banaya hai. Main tasks perform kar sakta hoon aur questions ka answer de sakta hoon.";
+    return formatByStyle(
+      responseStyle,
+      "Main COCO hoon, ek AI assistant jo Aditya Gupta ne banaya hai. Main tasks perform kar sakta hoon aur questions ka answer de sakta hoon.",
+      "I am COCO, an AI assistant created by Aditya Gupta. I can perform tasks and answer questions."
+    );
   }
 
   if (extractedName) {
     conversationState.name = extractedName;
-    return `Hi ${extractedName}, nice to meet you. Kaise help karu?`;
+    return formatByStyle(
+      responseStyle,
+      `Hi ${extractedName}, nice to meet you. Kaise help karu?`,
+      `Hi ${extractedName}, nice to meet you. How can I help?`
+    );
   }
 
   if (/\bhow are you\b/.test(normalized)) {
-    return "Main ready hoon help karne ke liye.";
+    return formatByStyle(
+      responseStyle,
+      "Main ready hoon help karne ke liye.",
+      "I am ready to help you."
+    );
   }
 
   if (/\b(what are you doing|what you doing|what're you doing)\b/.test(normalized)) {
-    return "Main yaha tasks aur questions me help karne ke liye hoon.";
+    return formatByStyle(
+      responseStyle,
+      "Main yaha tasks aur questions me help karne ke liye hoon.",
+      "I am here to help with tasks and questions."
+    );
   }
 
   if (/\b(hi|hello|hey|namaste|yo)\b/.test(normalized)) {
     if (conversationState.name) {
-      return `Hello ${conversationState.name}, kaise help kar sakta hoon?`;
+      return formatByStyle(
+        responseStyle,
+        `Hello ${conversationState.name}, kaise help kar sakta hoon?`,
+        `Hello ${conversationState.name}, how can I help?`
+      );
     }
 
-    return "Hello, kaise help kar sakta hoon?";
+    return formatByStyle(
+      responseStyle,
+      "Hello, kaise help kar sakta hoon?",
+      "Hello, how can I help?"
+    );
   }
 
-  return "Thoda clear karo, samajh nahi aaya.";
+  return formatByStyle(
+    responseStyle,
+    "Thoda clear karo, samajh nahi aaya.",
+    "Please clarify your request; I did not fully understand it."
+  );
 }
 
-function buildFallback(command, reason = "fallback") {
+function buildFallback(command, reason = "fallback", responseStyle = "english") {
   return {
     action: "chat",
     parameters: {
-      response: buildConversationResponse(command),
+      response: buildConversationResponse(command, responseStyle),
+      _response_style: responseStyle,
     },
     meta: {
       source: "fallback",
@@ -177,9 +228,9 @@ function normalizeParameters(parameters) {
   return normalized;
 }
 
-function normalizeStep(stepPayload, originalCommand, source = "groq") {
+function normalizeStep(stepPayload, originalCommand, source = "groq", responseStyle = "english") {
   if (!stepPayload || typeof stepPayload !== "object") {
-    return buildFallback(originalCommand, "invalid_step");
+    return buildFallback(originalCommand, "invalid_step", responseStyle);
   }
 
   const safeAction = normalizeString(stepPayload.action);
@@ -191,7 +242,8 @@ function normalizeStep(stepPayload, originalCommand, source = "groq") {
     const topLevelResponse = normalizeString(stepPayload.response);
     parameters.response = personalizeChatResponse(
       originalCommand,
-      parameters.response || topLevelResponse
+      parameters.response || topLevelResponse,
+      responseStyle
     );
   }
 
@@ -203,6 +255,8 @@ function normalizeStep(stepPayload, originalCommand, source = "groq") {
     parameters.type = "name";
   }
 
+  parameters._response_style = responseStyle;
+
   return {
     action,
     parameters,
@@ -212,20 +266,20 @@ function normalizeStep(stepPayload, originalCommand, source = "groq") {
   };
 }
 
-function validateActionPayload(payload, originalCommand) {
+function validateActionPayload(payload, originalCommand, responseStyle = "english") {
   if (!payload || typeof payload !== "object") {
-    return [buildFallback(originalCommand, "invalid_payload")];
+    return [buildFallback(originalCommand, "invalid_payload", responseStyle)];
   }
 
   if (Array.isArray(payload.steps) && payload.steps.length > 0) {
-    return payload.steps.map((step) => normalizeStep(step, originalCommand, "groq"));
+    return payload.steps.map((step) => normalizeStep(step, originalCommand, "groq", responseStyle));
   }
 
   if (payload.action) {
-    return [normalizeStep(payload, originalCommand, "groq_single_step")];
+    return [normalizeStep(payload, originalCommand, "groq_single_step", responseStyle)];
   }
 
-  return [buildFallback(originalCommand, "missing_steps")];
+  return [buildFallback(originalCommand, "missing_steps", responseStyle)];
 }
 
 function toHistoryRecord(command, actionPlan, execution) {
@@ -253,7 +307,7 @@ function inferYoutubeQueryFromCommand(command) {
   return cleaned;
 }
 
-async function executeSteps(actionSteps, command) {
+async function executeSteps(actionSteps, command, responseStyle = "english") {
   const stepsExecuted = [];
   let activeApp = "";
 
@@ -263,6 +317,7 @@ async function executeSteps(actionSteps, command) {
       ...step,
       parameters: {
         ...(step.parameters || {}),
+        _response_style: responseStyle,
       },
     };
 
@@ -326,7 +381,7 @@ async function executeSteps(actionSteps, command) {
   return stepsExecuted;
 }
 
-function buildFinalMessage(stepsExecuted) {
+function buildFinalMessage(stepsExecuted, responseStyle = "english") {
   const failedStep = stepsExecuted.find((step) => step.status === "failed");
 
   if (failedStep) {
@@ -338,14 +393,14 @@ function buildFinalMessage(stepsExecuted) {
   }
 
   if (stepsExecuted.length === 1 && stepsExecuted[0]?.action === "chat") {
-    return stepsExecuted[0].message || "Hello, kaise help kar sakta hoon?";
+    return stepsExecuted[0].message || formatByStyle(responseStyle, "Hello, kaise help kar sakta hoon?", "Hello, how can I help?");
   }
 
   if (stepsExecuted.length === 1) {
-    return stepsExecuted[0].message || "Kaam ho gaya.";
+    return stepsExecuted[0].message || formatByStyle(responseStyle, "Kaam ho gaya.", "Task completed.");
   }
 
-  return "Kaam complete ho gaya.";
+  return formatByStyle(responseStyle, "Kaam complete ho gaya.", "Task completed successfully.");
 }
 
 function buildModePayload(stepsExecuted) {
@@ -361,6 +416,7 @@ function buildModePayload(stepsExecuted) {
 
 export async function postCommand(req, res) {
   const command = normalizeString(req.body?.command);
+  const responseStyle = detectResponseStyle(command);
 
   if (!command) {
     return res.status(400).json({
@@ -386,6 +442,7 @@ export async function postCommand(req, res) {
           parameters: {
             type: "name",
             name: conversationState.name,
+            _response_style: responseStyle,
           },
           meta: {
             source: "rule_name_lookup",
@@ -399,11 +456,11 @@ export async function postCommand(req, res) {
       const parsedJson = parseActionJson(rawResponse);
       console.info("[command] parsed_json", parsedJson);
 
-      actionSteps = validateActionPayload(parsedJson, command);
+      actionSteps = validateActionPayload(parsedJson, command, responseStyle);
     }
 
-    const stepsExecuted = await executeSteps(actionSteps, command);
-    const finalMessage = buildFinalMessage(stepsExecuted);
+    const stepsExecuted = await executeSteps(actionSteps, command, responseStyle);
+    const finalMessage = buildFinalMessage(stepsExecuted, responseStyle);
 
     appendConversationHistory("user", command);
     appendConversationHistory("assistant", finalMessage);
@@ -418,9 +475,9 @@ export async function postCommand(req, res) {
   } catch (error) {
     console.error("[command] processing_error", error);
 
-    const fallbackSteps = [buildFallback(command, "parse_or_provider_error")];
-    const stepsExecuted = await executeSteps(fallbackSteps, command);
-    const finalMessage = buildFinalMessage(stepsExecuted);
+    const fallbackSteps = [buildFallback(command, "parse_or_provider_error", responseStyle)];
+    const stepsExecuted = await executeSteps(fallbackSteps, command, responseStyle);
+    const finalMessage = buildFinalMessage(stepsExecuted, responseStyle);
 
     appendConversationHistory("user", command);
     appendConversationHistory("assistant", finalMessage);

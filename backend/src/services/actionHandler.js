@@ -57,6 +57,17 @@ function asText(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function resolveResponseStyle(parameters = {}) {
+  return asText(parameters._response_style).toLowerCase() === "bilingual" ? "bilingual" : "english";
+}
+
+function formatByStyle(style, hinglish, english) {
+  if (style === "bilingual") {
+    return hinglish;
+  }
+  return english;
+}
+
 function titleCase(value) {
   return value
     .split(" ")
@@ -309,6 +320,7 @@ async function openUrlInPreferredBrowser(url, browser) {
 }
 
 async function openWebsiteAction(parameters) {
+  const responseStyle = resolveResponseStyle(parameters);
   const rawTarget = firstNonEmpty(parameters.url, parameters.website, parameters.site, parameters.query, parameters.app_name, parameters.app);
   const url = buildWebsiteUrl(rawTarget);
 
@@ -316,7 +328,7 @@ async function openWebsiteAction(parameters) {
     return {
       action: "open_website",
       status: "failed",
-      message: "Ye app ya website nahi mila, thoda clear karo.",
+      message: formatByStyle(responseStyle, "Ye app ya website nahi mila, thoda clear karo.", "I could not find that app or website. Please clarify."),
       details: {
         target: rawTarget,
       },
@@ -330,7 +342,7 @@ async function openWebsiteAction(parameters) {
   return {
     action: "open_website",
     status: "completed",
-    message: `${label} browser me open kar raha hoon.`,
+    message: formatByStyle(responseStyle, `${label} browser me open kar raha hoon.`, `Opening ${label} in your browser.`),
     details: {
       url,
       browser: browser || "default",
@@ -340,6 +352,7 @@ async function openWebsiteAction(parameters) {
 }
 
 async function openAppAction(parameters) {
+  const responseStyle = resolveResponseStyle(parameters);
   const openTarget = extractOpenTarget(parameters);
   const { key: requestedApp, command } = resolveAppName(parameters);
 
@@ -356,7 +369,7 @@ async function openAppAction(parameters) {
     return {
       action: "open_app",
       status: "failed",
-      message: "Ye app ya website nahi mila, thoda clear karo.",
+      message: formatByStyle(responseStyle, "Ye app ya website nahi mila, thoda clear karo.", "I could not find that app or website. Please clarify."),
       details: {
         app_name: asText(parameters.app_name || parameters.app || parameters.query),
       },
@@ -367,7 +380,7 @@ async function openAppAction(parameters) {
     return {
       action: "open_app",
       status: "failed",
-      message: `${titleCase(requestedApp)} system me available nahi hai.`,
+      message: formatByStyle(responseStyle, `${titleCase(requestedApp)} system me available nahi hai.`, `${titleCase(requestedApp)} is not available on this system.`),
       details: {
         app_name: requestedApp,
       },
@@ -380,7 +393,7 @@ async function openAppAction(parameters) {
     return {
       action: "open_app",
       status: "failed",
-      message: `${titleCase(requestedApp)} system me available nahi hai.`,
+      message: formatByStyle(responseStyle, `${titleCase(requestedApp)} system me available nahi hai.`, `${titleCase(requestedApp)} is not available on this system.`),
       details: {
         app_name: requestedApp,
       },
@@ -390,12 +403,13 @@ async function openAppAction(parameters) {
   return {
     action: "open_app",
     status: "completed",
-    message: `${titleCase(requestedApp)} open kar raha hoon.`,
+    message: formatByStyle(responseStyle, `${titleCase(requestedApp)} open kar raha hoon.`, `Opening ${titleCase(requestedApp)}.`),
     details: { app_name: requestedApp },
   };
 }
 
 async function playYoutubeAction(parameters) {
+  const responseStyle = resolveResponseStyle(parameters);
   const query = extractYoutubeQuery(parameters);
   const browser = firstNonEmpty(parameters.browser, parameters.app, parameters.app_name);
   const targetUrl = query
@@ -408,8 +422,8 @@ async function playYoutubeAction(parameters) {
     action: "play_youtube",
     status: "completed",
     message: query
-      ? "Song play kar raha hoon."
-      : "YouTube open kar raha hoon.",
+      ? formatByStyle(responseStyle, "Song play kar raha hoon.", "Playing your requested YouTube result.")
+      : formatByStyle(responseStyle, "YouTube open kar raha hoon.", "Opening YouTube."),
     details: {
       query,
       url: targetUrl,
@@ -419,6 +433,7 @@ async function playYoutubeAction(parameters) {
 }
 
 async function createFileAction(parameters) {
+  const responseStyle = resolveResponseStyle(parameters);
   const filename = sanitizeFilename(extractFilename(parameters));
   if (!filename) {
     throw new Error("Invalid or missing filename for create_file.");
@@ -435,7 +450,7 @@ async function createFileAction(parameters) {
   return {
     action: "create_file",
     status: "completed",
-    message: `File create kar di hai: ${filename}`,
+    message: formatByStyle(responseStyle, `File create kar di hai: ${filename}`, `Created file: ${filename}`),
     details: {
       filename,
       path: filePath,
@@ -445,10 +460,11 @@ async function createFileAction(parameters) {
 }
 
 async function getInfoAction(parameters) {
+  const responseStyle = resolveResponseStyle(parameters);
   const query = asText(parameters.query);
   const fallbackMessage = query
-    ? `Samajh gaya. Ye short answer hai: ${query}`
-    : "Main try kar sakta hoon, thoda aur detail do.";
+    ? formatByStyle(responseStyle, `Samajh gaya. Ye short answer hai: ${query}`, `Got it. Here is a short response: ${query}`)
+    : formatByStyle(responseStyle, "Main try kar sakta hoon, thoda aur detail do.", "I can help with that. Please share a bit more detail.");
 
   if (!query || !env.groqApiKey) {
     return {
@@ -464,7 +480,7 @@ async function getInfoAction(parameters) {
   let answer = "";
 
   try {
-    answer = await routeInfoResponse(query);
+    answer = await routeInfoResponse(query, responseStyle);
   } catch {
     answer = fallbackMessage;
   }
@@ -480,6 +496,7 @@ async function getInfoAction(parameters) {
 }
 
 async function getUserInfoAction(parameters) {
+  const responseStyle = resolveResponseStyle(parameters);
   const type = asText(parameters.type).toLowerCase();
   const name = asText(parameters.name);
 
@@ -487,7 +504,9 @@ async function getUserInfoAction(parameters) {
     return {
       action: "get_user_info",
       status: "completed",
-      message: name ? `Tumhara naam ${name} hai` : "Mujhe abhi tak tumhara naam nahi pata",
+      message: name
+        ? formatByStyle(responseStyle, `Tumhara naam ${name} hai`, `Your name is ${name}`)
+        : formatByStyle(responseStyle, "Mujhe abhi tak tumhara naam nahi pata", "I do not know your name yet"),
       details: {
         type: "name",
         found: Boolean(name),
@@ -498,7 +517,7 @@ async function getUserInfoAction(parameters) {
   return {
     action: "get_user_info",
     status: "completed",
-    message: "Mujhe abhi tak tumhari yeh info nahi pata",
+    message: formatByStyle(responseStyle, "Mujhe abhi tak tumhari yeh info nahi pata", "I do not have that information yet"),
     details: {
       type: type || "unknown",
       found: false,
@@ -507,12 +526,13 @@ async function getUserInfoAction(parameters) {
 }
 
 async function chatAction(parameters) {
+  const responseStyle = resolveResponseStyle(parameters);
   const response = firstNonEmpty(parameters.response, parameters.message);
 
   return {
     action: "chat",
     status: "completed",
-    message: response || "Hello, kaise help kar sakta hoon?",
+    message: response || formatByStyle(responseStyle, "Hello, kaise help kar sakta hoon?", "Hello, how can I help?"),
     details: {
       mode: "conversation",
     },

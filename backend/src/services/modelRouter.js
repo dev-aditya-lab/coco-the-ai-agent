@@ -60,20 +60,25 @@ export async function routeActionPlan(input, history = []) {
   return requestActionPlanQwen(input, history);
 }
 
-export async function routeInfoResponse(input) {
+export async function routeInfoResponse(input, responseStyle = "english") {
+  const style = responseStyle === "bilingual" ? "bilingual" : "english";
   const type = detectTaskType(input);
+  const styleInstruction = style === "bilingual"
+    ? "Respond once in natural mixed Hinglish. Do not add a separate translated line."
+    : "Respond only in English, in 1-2 short lines.";
+  const styledInput = `${input}\n\nStyle rule: ${styleInstruction}`;
 
   if (type === "info") {
     console.info("[model-router] info_model", {
       taskType: type,
       model: "gpt",
     });
-    return requestInfoTextGpt(input);
+    return requestInfoTextGpt(styledInput);
   }
 
   console.info("[model-router] info_model", {
     taskType: type,
     model: "qwen",
   });
-  return requestInfoTextQwen(input);
+  return requestInfoTextQwen(styledInput);
 }

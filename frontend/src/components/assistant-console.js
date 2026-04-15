@@ -326,6 +326,7 @@ export default function AssistantConsole() {
       const nextResponse = normalizeResponse(rawResponse, trimmedCommand);
       setResponse(nextResponse);
       setPhase(PHASE.completed);
+      setCommand("");
       refreshHistory();
     } catch {
       setError("Could not process request.");
