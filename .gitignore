@@ -40,6 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-!README.md
 *md
+!README.md
 generated
