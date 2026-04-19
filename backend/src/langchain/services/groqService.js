@@ -192,6 +192,7 @@ Rules:
 - Keep at most 4 actions.
 - Each action must be one of allowed actions.
 - Put concrete tool input in parameters.
+- Email requests MUST use send_email (not get_info/chat), include to, subject, body, and mode='send' unless user explicitly asks for a draft.
 - Do not return extra keys.`;
 
     const messages = [

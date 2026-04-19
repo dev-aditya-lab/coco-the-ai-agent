@@ -50,9 +50,9 @@ function MessageItem({ item }) {
   );
 }
 
-export default function ConversationPanel({ messages, loading, agentStatus }) {
+export default function ConversationPanel({ messages, loading, agentStatus,children }) {
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900/80 shadow-[0_16px_48px_-30px_rgba(15,23,42,0.9)]">
+    <section className="relative z-10 flex h-full flex-col overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900/80 shadow-[0_16px_48px_-30px_rgba(15,23,42,0.9)]">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(251,191,36,0.1),transparent_38%),radial-gradient(circle_at_bottom_left,rgba(34,211,238,0.08),transparent_40%)]" />
 
       <div className="relative border-b border-slate-700/80 px-4 py-3">
@@ -65,7 +65,7 @@ export default function ConversationPanel({ messages, loading, agentStatus }) {
         </div>
       </div>
 
-      <div className="relative grid max-h-168 gap-3 overflow-auto p-4 md:max-h-192">
+      <div className="relative flex flex-1 flex-col gap-3 overflow-auto p-4">
         {messages.map((item) => (
           <MessageItem key={item.id} item={item} />
         ))}
@@ -77,6 +77,11 @@ export default function ConversationPanel({ messages, loading, agentStatus }) {
           </p>
         ) : null}
       </div>
+      {children ? (
+        <div className="relative border-t border-slate-700/80 px-4 py-3">
+          {children}
+        </div>
+      ) : null}
     </section>
   );
 }

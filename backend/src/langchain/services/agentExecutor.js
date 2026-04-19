@@ -82,6 +82,38 @@ class AgentExecutor {
       : "I'm doing great, thanks! I'm ready to help with whatever you need.";
   }
 
+  isEmailIntent(command) {
+    const normalized = typeof command === "string" ? command.trim().toLowerCase() : "";
+    if (!normalized) {
+      return false;
+    }
+
+    const hasEmailVerb = /\b(send|email|mail)\b/.test(normalized);
+    const hasRecipient = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i.test(normalized);
+    return hasEmailVerb && hasRecipient;
+  }
+
+  extractEmailParams(command) {
+    const text = typeof command === "string" ? command.trim() : "";
+    const toMatch = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+    const to = toMatch ? toMatch[0] : "";
+
+    const subjectMatch =
+      text.match(/\bsubject\s*(?:is|:)?\s*["']?([^"'\n]+)["']?/i)
+      || text.match(/\bwith\s+(.+?)\s+subject\b/i);
+    const subject = subjectMatch && subjectMatch[1] ? subjectMatch[1].trim() : "COCO update";
+
+    const bodyMatch = text.match(/\babout\s+(.+?)(?:\s+with\s+.+\s+subject\b|\s+subject\s*(?:is|:)|$)/i);
+    const bodyTopic = bodyMatch && bodyMatch[1] ? bodyMatch[1].trim() : "your requested update";
+
+    return {
+      to,
+      subject,
+      body: `Hi,\n\nSharing an update about ${bodyTopic}.\n\nRegards,\nCOCO`,
+      mode: "send",
+    };
+  }
+
   normalizePlan(actionPlan) {
     if (Array.isArray(actionPlan?.actions) && actionPlan.actions.length > 0) {
       return actionPlan.actions
@@ -120,7 +152,7 @@ class AgentExecutor {
     }
 
     if (action === "send_email" && !next.mode) {
-      next.mode = "draft";
+      next.mode = "send";
     }
 
     if (action === "schedule_reminder" && !next.title) {
@@ -238,6 +270,34 @@ class AgentExecutor {
             autonomousMode: false,
             planner: "shortcut",
             shortcut: this.isGreetingIntent(userInput) ? "greeting" : "smalltalk",
+          },
+        };
+      }
+
+      if (this.isEmailIntent(userInput)) {
+        const executedSteps = [];
+        const plannedParams = this.prepareParameters(
+          "send_email",
+          this.extractEmailParams(userInput),
+          userInput,
+          memoryContext,
+          responseStyle,
+          history,
+        );
+
+        const execution = await this.executeSingleStep("send_email", plannedParams, 1, executedSteps);
+
+        return {
+          action: "send_email",
+          result: execution.message,
+          metadata: {
+            duration: Date.now() - startTime,
+            style: responseStyle,
+            parameters: plannedParams,
+            executedSteps,
+            autonomousMode: false,
+            planner: "shortcut",
+            shortcut: "email_intent",
           },
         };
       }

@@ -53,11 +53,15 @@ export class SendEmailTool extends BaseTool {
     }
 
     try {
-      await sendMail({ to, subject, html: `<div><p>${body.replace(/\n/g, "<br/>")}</p></div>` });
+      const sendResult = await sendMail({
+        to,
+        subject,
+        html: `<div><p>${body.replace(/\n/g, "<br/>")}</p></div>`,
+      });
 
       await retainMemory(`Email sent to ${to}. Subject: ${subject}.`, {
         context: "email",
-        metadata: { mode, to, subject },
+        metadata: { mode, to, subject, emailId: sendResult?.id || "" },
         tags: ["email", "sent"],
       });
 
@@ -67,6 +71,7 @@ export class SendEmailTool extends BaseTool {
         mode,
         to,
         subject,
+        emailId: sendResult?.id || "",
       };
     } catch (error) {
       return this.formatByStyle(style, `Email send nahi hua: ${error.message}`, `Failed to send email: ${error.message}`);

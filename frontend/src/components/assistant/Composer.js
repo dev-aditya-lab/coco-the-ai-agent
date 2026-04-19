@@ -8,21 +8,6 @@ const BROWSER_TTS_GENDER = (process.env.NEXT_PUBLIC_TTS_GENDER || "female").toLo
   ? "male"
   : "female";
 
-const DEMO_PROMPTS = [
-  { label: "chat", prompt: "Hi COCO, how are you today?" },
-  { label: "open_app", prompt: "Open calculator app" },
-  { label: "open_website", prompt: "Open github.com" },
-  { label: "play_youtube", prompt: "Play lofi coding songs on YouTube" },
-  { label: "create_file", prompt: "Create file notes.md with project summary" },
-  { label: "get_info", prompt: "What is the current time in India?" },
-  { label: "get_user_info", prompt: "What is my name?" },
-  { label: "research_web", prompt: "Do web research on latest AI agent frameworks with references" },
-  { label: "send_email", prompt: "Draft email to demo@company.com with subject Sprint Update and body We completed phase 2." },
-  { label: "schedule_reminder", prompt: "Set reminder for tomorrow 9 AM to review project tasks" },
-  { label: "track_budget", prompt: "Track expense 450 in food category" },
-  { label: "track_habit", prompt: "Mark habit workout as done" },
-];
-
 function chooseVoice(voices, language, gender) {
   if (!Array.isArray(voices) || voices.length === 0) {
     return null;
@@ -256,26 +241,28 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "",
     });
   };
 
-  return (
-    <section className="rounded-xl border border-slate-700 bg-slate-900 shadow-lg">
-      <div className="border-b border-slate-700 px-4 py-3">
-        <h2 className="text-sm font-semibold text-slate-100">Command Input</h2>
-      </div>
+  const helperStatus = voiceError
+    || (loading ? "COCO is thinking and planning actions..." : "")
+    || (speaking ? "Speaking response..." : "")
+    || (voiceSnippet ? `Heard: ${voiceSnippet}` : "")
+    || (!voiceSupported ? "Voice input is not supported in this browser." : voiceStatus);
 
-      <form className="grid gap-3 p-4" onSubmit={submit}>
+  return (
+    <section className="rounded-xl border border-slate-700/90 bg-slate-900/95 shadow-[0_12px_36px_-20px_rgba(2,6,23,0.95)]">
+      <form className="grid gap-2 p-3" onSubmit={submit}>
         <textarea
           value={value}
           onChange={(event) => setValue(event.target.value)}
           placeholder="Type a command in English or Hinglish..."
-          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-100 outline-none focus:border-blue-500"
-          rows={3}
+          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-blue-500"
+          rows={2}
           disabled={loading}
         />
 
         <div className="flex flex-wrap gap-2">
           <button
             type="submit"
-            className="inline-flex items-center gap-2 rounded-lg border border-blue-600 bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-lg border border-blue-600 bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={loading || !value.trim()}
           >
             <SendHorizontal size={16} />
@@ -284,7 +271,7 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "",
 
           <button
             type="button"
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs text-slate-100 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
             onClick={toggleVoice}
             disabled={!voiceSupported || loading}
             aria-pressed={listening}
@@ -295,7 +282,7 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "",
 
           <button
             type="button"
-            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${muted ? "border-slate-500 bg-slate-700 text-slate-200" : "border-slate-600 bg-slate-800 text-slate-100"}`}
+            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs ${muted ? "border-slate-500 bg-slate-700 text-slate-200" : "border-slate-600 bg-slate-800 text-slate-100"}`}
             onClick={toggleMute}
           >
             {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
@@ -303,33 +290,10 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "",
           </button>
         </div>
 
-        {!voiceSupported ? <p className="m-0 text-xs text-slate-400">Voice input is not supported in this browser.</p> : null}
-        {voiceError ? <p className="m-0 text-xs text-red-300">{voiceError}</p> : null}
-        {voiceSupported ? <p className="m-0 text-xs text-slate-400">{voiceStatus}</p> : null}
-        {loading ? <p className="m-0 animate-pulse text-xs text-blue-200">COCO is thinking and planning actions...</p> : null}
-        {speaking ? <p className="m-0 text-xs text-slate-300">Speaking response...</p> : null}
-        {voiceSnippet ? <p className="m-0 text-xs text-slate-300">Heard: {voiceSnippet}</p> : null}
+        {helperStatus ? (
+          <p className={`m-0 truncate text-xs ${voiceError ? "text-red-300" : "text-slate-400"}`}>{helperStatus}</p>
+        ) : null}
       </form>
-
-      <div className="border-t border-slate-700 px-4 py-3">
-        <p className="mb-2 text-xs font-medium text-slate-400">Demo prompts by tool</p>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {DEMO_PROMPTS.map((item) => (
-            <button
-              key={`${item.label}-${item.prompt}`}
-              type="button"
-              className="flex flex-col items-start gap-1 rounded-lg border border-slate-700 bg-slate-800 p-2 text-left hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
-              onClick={() => onSend(item.prompt)}
-              disabled={loading}
-            >
-              <span className="rounded-md border border-slate-600 bg-slate-900 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-300">
-                {item.label}
-              </span>
-              <span className="text-xs text-slate-100">{item.prompt}</span>
-            </button>
-          ))}
-        </div>
-      </div>
     </section>
   );
 }
