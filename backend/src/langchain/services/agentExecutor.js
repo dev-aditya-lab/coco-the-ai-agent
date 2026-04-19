@@ -13,6 +13,7 @@ class AgentExecutor {
     this.registry = getToolRegistry();
     this.maxIterations = options.maxIterations || 10;
     this.openClawEnabled = options.openClawEnabled ?? env.openclawEnabled;
+    this.openClawRuntimeAvailable = true;
     this.autonomousEnabled = options.autonomousEnabled ?? env.agentAutonomousMode;
     this.maxAutonomousIterations = options.maxAutonomousIterations || env.agentAutonomousMaxIterations || 4;
     this.verbose = options.verbose || false;
@@ -21,7 +22,7 @@ class AgentExecutor {
   }
 
   async planAction(userInput, history, memoryContext) {
-    if (!this.openClawEnabled) {
+    if (!this.openClawEnabled || !this.openClawRuntimeAvailable) {
       return {
         planner: "groq",
         plan: await getGroqActionPlan(userInput, history, memoryContext),
@@ -35,6 +36,7 @@ class AgentExecutor {
       };
     } catch (error) {
       this.log(`OpenClaw plan failed, falling back to Groq: ${error.message}`);
+      this.openClawRuntimeAvailable = false;
       return {
         planner: "groq",
         plan: await getGroqActionPlan(userInput, history, memoryContext),
@@ -43,7 +45,7 @@ class AgentExecutor {
   }
 
   async planAutonomousStep(userInput, history, memoryContext, executedSteps, remainingIterations) {
-    if (!this.openClawEnabled) {
+    if (!this.openClawEnabled || !this.openClawRuntimeAvailable) {
       return {
         planner: "groq",
         stepPlan: await getGroqAutonomousStep({
@@ -69,6 +71,7 @@ class AgentExecutor {
       };
     } catch (error) {
       this.log(`OpenClaw autonomous step failed, falling back to Groq: ${error.message}`);
+      this.openClawRuntimeAvailable = false;
       return {
         planner: "groq",
         stepPlan: await getGroqAutonomousStep({
