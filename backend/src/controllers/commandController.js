@@ -1,6 +1,7 @@
 import { getAgentExecutor } from "../langchain/index.js";
 import { env } from "../config/env.js";
 import { getRecentCommands, saveCommandHistory } from "../services/historyService.js";
+import { buildMemoryContext, retainMemory } from "../langchain/index.js";
 
 const MAX_CONVERSATION_MESSAGES = 10;
 const conversationState = {
@@ -102,11 +103,20 @@ export async function postCommand(req, res) {
   }
 
   try {
+    const memoryContext = await buildMemoryContext(command, {
+      budget: "low",
+      maxTokens: 1000,
+      includeEntities: true,
+      includeChunks: false,
+      includeSourceFacts: false,
+      tags: conversationState.name ? [conversationState.name.toLowerCase()] : undefined,
+    });
+
     const executor = getAgentExecutor({
       verbose: env.DEBUG === "true",
     });
 
-    const result = await executor.execute(command, conversationState.history);
+    const result = await executor.execute(command, conversationState.history, memoryContext);
 
     const parameters = {
       ...(result.metadata?.parameters || {}),
@@ -128,6 +138,27 @@ export async function postCommand(req, res) {
 
     appendConversationHistory("user", command);
     appendConversationHistory("assistant", finalMessage);
+
+    await retainMemory(`User said: ${command}\nAssistant replied: ${finalMessage}`, {
+      context: "conversation",
+      metadata: {
+        action: result.action,
+        userName: conversationState.name || "",
+        command,
+      },
+      tags: conversationState.name ? ["conversation", conversationState.name.toLowerCase()] : ["conversation"],
+    });
+
+    if (extractedName && !isNameLookupIntent(command)) {
+      await retainMemory(`The user introduced themselves as ${extractedName}.`, {
+        context: "profile",
+        metadata: {
+          type: "user_name",
+          name: extractedName,
+        },
+        tags: ["profile", "name"],
+      });
+    }
 
     await logCommandToHistory(
       command,
