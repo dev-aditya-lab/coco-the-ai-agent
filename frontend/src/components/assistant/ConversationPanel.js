@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Bot, Sparkles, User } from "lucide-react";
 import StepList from "@/components/assistant/StepList";
 import MarkdownRenderer from "@/components/assistant/MarkdownRenderer";
@@ -50,7 +51,14 @@ function MessageItem({ item }) {
   );
 }
 
-export default function ConversationPanel({ messages, loading, agentStatus,children }) {
+export default function ConversationPanel({ messages, loading, agentStatus, children }) {
+  const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, loading]);
   return (
     <section className="relative z-10 flex h-full flex-col overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900/80 shadow-[0_16px_48px_-30px_rgba(15,23,42,0.9)]">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(251,191,36,0.1),transparent_38%),radial-gradient(circle_at_bottom_left,rgba(34,211,238,0.08),transparent_40%)]" />
@@ -76,6 +84,7 @@ export default function ConversationPanel({ messages, loading, agentStatus,child
             COCO is thinking, planning, and executing...
           </p>
         ) : null}
+        <div ref={messagesEndRef} />
       </div>
       {children ? (
         <div className="relative border-t border-slate-700/80 px-4 py-3">

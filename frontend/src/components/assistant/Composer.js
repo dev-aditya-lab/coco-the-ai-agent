@@ -30,25 +30,33 @@ function chooseVoice(voices, language, gender) {
 export default function Composer({ loading, onSend, latestAssistantMessage = "", onStatusChange }) {
   const [value, setValue] = useState("");
   const [listening, setListening] = useState(false);
-  const [voiceSupported] = useState(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-    return Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
-  });
+  const [mounted, setMounted] = useState(false);
+  const [voiceSupported, setVoiceSupported] = useState(false);
   const [voiceError, setVoiceError] = useState("");
   const [voiceStatus, setVoiceStatus] = useState("Voice idle");
-  const [muted, setMuted] = useState(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-    return window.localStorage.getItem("coco-muted") === "1";
-  });
+  const [muted, setMuted] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [voiceSnippet, setVoiceSnippet] = useState("");
   const ttsVoiceRef = useRef(null);
   const lastSpokenMessageRef = useRef("");
   const recognitionRef = useRef(null);
+  const retryCountRef = useRef(0);
+  const maxRetriesRef = useRef(2);
+
+  // Initialize on mount
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    
+    // Check voice support
+    const supported = Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+    setVoiceSupported(supported);
+    
+    // Load muted state from localStorage
+    const isMuted = window.localStorage.getItem("coco-muted") === "1";
+    setMuted(isMuted);
+    
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -57,7 +65,7 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "",
   }, [muted]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
+    if (typeof window === "undefined" || !mounted) {
       return undefined;
     }
 
@@ -220,13 +228,22 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "",
     try {
       if (listening) {
         recognitionRef.current.stop();
+        retryCountRef.current = 0;
       } else {
         setVoiceError("");
+        retryCountRef.current = 0;
         recognitionRef.current.start();
       }
-    } catch {
-      setVoiceError("Voice recognition is not available right now.");
-      setListening(false);
+    } catch (error) {
+      if (retryCountRef.current < maxRetriesRef.current) {
+        retryCountRef.current += 1;
+        const delay = Math.pow(2, retryCountRef.current) * 100;
+        setTimeout(toggleVoice, delay);
+      } else {
+        setVoiceError("Voice recognition is not available right now. Please refresh the page.");
+        setListening(false);
+        retryCountRef.current = 0;
+      }
     }
   };
 
@@ -249,7 +266,7 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "",
 
   return (
     <section className="rounded-xl border border-slate-700/90 bg-slate-900/95 shadow-[0_12px_36px_-20px_rgba(2,6,23,0.95)]">
-      <form className="grid gap-2 p-3" onSubmit={submit}>
+      <form className="grid gap-2 p-2" onSubmit={submit}>
         <textarea
           value={value}
           onChange={(event) => setValue(event.target.value)}
@@ -269,28 +286,32 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "",
             <span>{loading ? "Sending..." : "Send Command"}</span>
           </button>
 
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs text-slate-100 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
-            onClick={toggleVoice}
-            disabled={!voiceSupported || loading}
-            aria-pressed={listening}
-          >
-            {listening ? <MicOff size={16} /> : <Mic size={16} />}
-            <span>{listening ? "Stop Voice" : "Voice Command"}</span>
-          </button>
+          {mounted && (
+            <>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs text-slate-100 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={toggleVoice}
+                disabled={!voiceSupported || loading}
+                aria-pressed={listening}
+              >
+                {listening ? <MicOff size={16} /> : <Mic size={16} />}
+                <span>{listening ? "Stop Voice" : "Voice Command"}</span>
+              </button>
 
-          <button
-            type="button"
-            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs ${muted ? "border-slate-500 bg-slate-700 text-slate-200" : "border-slate-600 bg-slate-800 text-slate-100"}`}
-            onClick={toggleMute}
-          >
-            {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-            <span>{muted ? "Muted" : "Voice Reply On"}</span>
-          </button>
+              <button
+                type="button"
+                className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs ${muted ? "border-slate-500 bg-slate-700 text-slate-200" : "border-slate-600 bg-slate-800 text-slate-100"}`}
+                onClick={toggleMute}
+              >
+                {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                <span>{muted ? "Muted" : "Voice Reply On"}</span>
+              </button>
+            </>
+          )}
         </div>
 
-        {helperStatus ? (
+        {mounted && helperStatus ? (
           <p className={`m-0 truncate text-xs ${voiceError ? "text-red-300" : "text-slate-400"}`}>{helperStatus}</p>
         ) : null}
       </form>

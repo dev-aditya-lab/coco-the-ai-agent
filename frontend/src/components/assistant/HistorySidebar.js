@@ -3,11 +3,11 @@ import { formatDateTime } from "@/utils/time";
 
 export default function HistorySidebar({ records, loadingHistory, onRefresh }) {
   return (
-    <aside className="rounded-xl border border-slate-700 bg-slate-900 shadow-lg">
-      <div className="flex items-center justify-between border-b border-slate-700 px-4 py-3">
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b border-slate-700 px-3 py-2">
         <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-slate-100">
           <History size={16} />
-          <span>Command History</span>
+          <span>History</span>
         </h2>
         <button
           className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-500 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
@@ -18,7 +18,7 @@ export default function HistorySidebar({ records, loadingHistory, onRefresh }) {
         </button>
       </div>
 
-      <div className="grid max-h-190 gap-3 overflow-auto p-4">
+      <div className="flex flex-1 flex-col gap-2 overflow-auto p-2">
         {records.length === 0 ? <p className="m-0 text-sm text-slate-400">No history available.</p> : null}
 
         {records.map((record) => (
@@ -33,6 +33,6 @@ export default function HistorySidebar({ records, loadingHistory, onRefresh }) {
           </article>
         ))}
       </div>
-    </aside>
+    </div>
   );
 }
