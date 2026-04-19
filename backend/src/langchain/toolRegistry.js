@@ -11,6 +11,7 @@ import { PlayYoutubeTool } from "./tools/playYoutubeTool.js";
 import { CreateFileTool } from "./tools/createFileTool.js";
 import { GetInfoTool } from "./tools/getInfoTool.js";
 import { GetUserInfoTool } from "./tools/getUserInfoTool.js";
+import { ResearchWebTool } from "./tools/researchWebTool.js";
 
 class ToolRegistry {
   constructor() {
@@ -30,6 +31,7 @@ class ToolRegistry {
     this.register(new CreateFileTool());
     this.register(new GetInfoTool());
     this.register(new GetUserInfoTool());
+    this.register(new ResearchWebTool());
   }
 
   /**
