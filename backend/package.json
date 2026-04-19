@@ -17,6 +17,7 @@
     "express": "^5.1.0",
     "langchain": "^1.3.3",
     "mongoose": "^8.14.2",
+    "openclaw": "^2026.4.15",
     "puppeteer": "^24.8.2",
     "resend": "^6.12.0"
   }

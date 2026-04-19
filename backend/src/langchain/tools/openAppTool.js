@@ -78,15 +78,30 @@ export class OpenAppTool extends BaseTool {
     try {
       // Execute app launch
       if (typeof appCommand === "string") {
-        execAsync(appCommand, { detached: true });
+        await execAsync(appCommand);
       } else if (appCommand.command) {
-        execAsync(appCommand.command, { detached: true });
+        await execAsync(appCommand.command);
       }
 
-      const appLabel = this.normalizeAppName(appName)
+      const normalizedName = this.normalizeAppName(appName);
+      const appLabel = normalizedName
         .split(" ")
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(" ");
+
+      const wasEmptyAction =
+        normalizedName.includes("empty")
+        || normalizedName.includes("clear")
+        || normalizedName.includes("khali")
+        || (typeof appCommand === "string" && appCommand.includes("Clear-RecycleBin"));
+
+      if (wasEmptyAction) {
+        return this.formatByStyle(
+          style,
+          "Recycle Bin saaf kar diya.",
+          "Recycle Bin has been cleared."
+        );
+      }
 
       return this.formatByStyle(
         style,

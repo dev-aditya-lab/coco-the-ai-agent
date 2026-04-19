@@ -5,6 +5,8 @@ export const APP_REGISTRY = {
   spotify: "start spotify",
   word: "start winword",
   calculator: "calc.exe",
+  recyclebin: "cmd /c start \"\" shell:RecycleBinFolder",
+  emptyrecyclebin: "powershell.exe -NoProfile -Command \"try { Clear-RecycleBin -Force -ErrorAction Stop } catch { } ; exit 0\"",
 };
 
 export const APP_ALIASES = {
@@ -18,4 +20,16 @@ export const APP_ALIASES = {
   calc: "calculator",
   "windows calculator": "calculator",
   "calculator app": "calculator",
+  recycle: "recyclebin",
+  "recycle bin": "recyclebin",
+  "recyclebin": "recyclebin",
+  trash: "recyclebin",
+  dustbin: "recyclebin",
+  "empty recycle bin": "emptyrecyclebin",
+  "clear recycle bin": "emptyrecyclebin",
+  "recycle bin empty": "emptyrecyclebin",
+  "recycle bin khali karo": "emptyrecyclebin",
+  "recycle bin khali krdo": "emptyrecyclebin",
+  "dustbin khali karo": "emptyrecyclebin",
+  "trash khali karo": "emptyrecyclebin",
 };
