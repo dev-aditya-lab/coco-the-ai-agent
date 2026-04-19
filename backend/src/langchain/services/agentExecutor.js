@@ -6,6 +6,7 @@
 import { getToolRegistry } from "../toolRegistry.js";
 import { env } from "../../config/env.js";
 import { getGroqActionPlan, getGroqAutonomousStep, getGroqEmailDraft } from "./groqService.js";
+import { APP_ALIASES, APP_REGISTRY } from "../../config/appRegistry.js";
 
 class AgentExecutor {
   constructor(options = {}) {
@@ -80,6 +81,57 @@ class AgentExecutor {
     return responseStyle === "bilingual"
       ? "Main achha hoon, thanks! Main ready hoon, bolo kya help chahiye."
       : "I'm doing great, thanks! I'm ready to help with whatever you need.";
+  }
+
+  sanitizeAssistantText(value) {
+    const text = typeof value === "string" ? value : "";
+    if (!text) {
+      return "";
+    }
+
+    const withoutThink = text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+    if (!withoutThink) {
+      return "";
+    }
+
+    if (/^\{[\s\S]*"next_action"[\s\S]*\}$/i.test(withoutThink)) {
+      return "";
+    }
+
+    return withoutThink;
+  }
+
+  isOpenAppIntent(command) {
+    const normalized = typeof command === "string" ? command.trim().toLowerCase() : "";
+    if (!normalized) {
+      return false;
+    }
+
+    if (!/\b(open|launch|start|run)\b/.test(normalized)) {
+      return false;
+    }
+
+    const knownNames = [...new Set([...Object.keys(APP_ALIASES), ...Object.keys(APP_REGISTRY)])];
+    return knownNames.some((name) => normalized.includes(name));
+  }
+
+  extractAppName(command) {
+    const text = typeof command === "string" ? command.trim() : "";
+    if (!text) {
+      return "";
+    }
+
+    const lower = text.toLowerCase();
+    const knownNames = [...new Set([...Object.keys(APP_ALIASES), ...Object.keys(APP_REGISTRY)])]
+      .sort((a, b) => b.length - a.length);
+
+    const matched = knownNames.find((name) => lower.includes(name));
+    if (matched) {
+      return matched;
+    }
+
+    const freeformMatch = text.match(/\b(?:open|launch|start|run)\s+(.+)$/i);
+    return freeformMatch?.[1]?.trim() || "";
   }
 
   isCountdownIntent(command) {
@@ -380,6 +432,16 @@ class AgentExecutor {
       next.query = userInput;
     }
 
+    if (action === "open_app") {
+      if (!next.app_name && typeof next.app === "string") {
+        next.app_name = next.app;
+      }
+      if (!next.app_name) {
+        next.app_name = this.extractAppName(userInput);
+      }
+      delete next.app;
+    }
+
     if (action === "play_youtube" && !next.query) {
       next.query = this.extractYoutubeQuery(userInput) || userInput;
     }
@@ -416,8 +478,9 @@ class AgentExecutor {
 
   normalizeToolResult(result) {
     if (result && typeof result === "object") {
-      const message = typeof result.message === "string" && result.message.trim()
-        ? result.message
+      const sanitizedMessage = this.sanitizeAssistantText(result.message);
+      const message = sanitizedMessage
+        ? sanitizedMessage
         : JSON.stringify(result);
       return {
         message,
@@ -425,7 +488,8 @@ class AgentExecutor {
       };
     }
 
-    const message = typeof result === "string" && result.trim() ? result : "Done.";
+    const sanitized = this.sanitizeAssistantText(result);
+    const message = sanitized || "Done.";
     return {
       message,
       details: {},
@@ -503,6 +567,35 @@ class AgentExecutor {
             autonomousMode: false,
             planner: "shortcut",
             shortcut: this.isGreetingIntent(userInput) ? "greeting" : "smalltalk",
+          },
+        };
+      }
+
+      if (this.isOpenAppIntent(userInput)) {
+        const executedSteps = [];
+        const appName = this.extractAppName(userInput);
+        const plannedParams = this.prepareParameters(
+          "open_app",
+          { app_name: appName },
+          userInput,
+          memoryContext,
+          responseStyle,
+          history,
+        );
+
+        const execution = await this.executeSingleStep("open_app", plannedParams, 1, executedSteps);
+
+        return {
+          action: "open_app",
+          result: execution.message,
+          metadata: {
+            duration: Date.now() - startTime,
+            style: responseStyle,
+            parameters: plannedParams,
+            executedSteps,
+            autonomousMode: false,
+            planner: "shortcut",
+            shortcut: "open_app_intent",
           },
         };
       }
@@ -635,7 +728,7 @@ class AgentExecutor {
           this.log(`Autonomous step plan: ${JSON.stringify(stepPlan)}`);
 
           if (stepPlan?.done) {
-            const finalResponse = stepPlan.final_response || lastResult || "Task completed.";
+            const finalResponse = this.sanitizeAssistantText(stepPlan.final_response) || lastResult || "Task completed.";
             return {
               action: lastAction,
               result: finalResponse,
