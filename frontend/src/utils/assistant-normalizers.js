@@ -46,3 +46,48 @@ export function normalizeHistoryRecords(payload) {
     createdAt: record?.createdAt,
   }));
 }
+
+export function normalizeTrackerSummary(payload) {
+  const data = payload?.data && typeof payload.data === "object" ? payload.data : {};
+  const reminders = Array.isArray(data.reminders) ? data.reminders : [];
+  const budget = data.budget && typeof data.budget === "object" ? data.budget : {};
+  const habits = data.habits && typeof data.habits === "object" ? data.habits : {};
+
+  return {
+    reminders: reminders.map((item, index) => ({
+      id: String(item?.id || `reminder-${index}`),
+      title: typeof item?.title === "string" ? item.title : "",
+      dueAt: item?.dueAt || null,
+      notes: typeof item?.notes === "string" ? item.notes : "",
+      status: typeof item?.status === "string" ? item.status : "pending",
+    })),
+    budget: {
+      income: Number(budget?.income || 0),
+      expense: Number(budget?.expense || 0),
+      net: Number(budget?.net || 0),
+      recent: Array.isArray(budget?.recent)
+        ? budget.recent.map((item, index) => ({
+            id: String(item?.id || `budget-${index}`),
+            type: typeof item?.type === "string" ? item.type : "expense",
+            amount: Number(item?.amount || 0),
+            category: typeof item?.category === "string" ? item.category : "general",
+            note: typeof item?.note === "string" ? item.note : "",
+            occurredAt: item?.occurredAt || null,
+          }))
+        : [],
+    },
+    habits: {
+      done: Number(habits?.done || 0),
+      skipped: Number(habits?.skipped || 0),
+      recent: Array.isArray(habits?.recent)
+        ? habits.recent.map((item, index) => ({
+            id: String(item?.id || `habit-${index}`),
+            habit: typeof item?.habit === "string" ? item.habit : "",
+            status: typeof item?.status === "string" ? item.status : "skipped",
+            note: typeof item?.note === "string" ? item.note : "",
+            occurredAt: item?.occurredAt || null,
+          }))
+        : [],
+    },
+  };
+}

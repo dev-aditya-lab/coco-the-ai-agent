@@ -17,6 +17,10 @@ const DEMO_PROMPTS = [
   { label: "get_info", prompt: "What is the current time in India?" },
   { label: "get_user_info", prompt: "What is my name?" },
   { label: "research_web", prompt: "Do web research on latest AI agent frameworks with references" },
+  { label: "send_email", prompt: "Draft email to demo@company.com with subject Sprint Update and body We completed phase 2." },
+  { label: "schedule_reminder", prompt: "Set reminder for tomorrow 9 AM to review project tasks" },
+  { label: "track_budget", prompt: "Track expense 450 in food category" },
+  { label: "track_habit", prompt: "Mark habit workout as done" },
 ];
 
 function chooseVoice(voices, language, gender) {
@@ -38,7 +42,7 @@ function chooseVoice(voices, language, gender) {
   );
 }
 
-export default function Composer({ loading, onSend, latestAssistantMessage = "" }) {
+export default function Composer({ loading, onSend, latestAssistantMessage = "", onStatusChange }) {
   const [value, setValue] = useState("");
   const [listening, setListening] = useState(false);
   const [voiceSupported, setVoiceSupported] = useState(false);
@@ -90,17 +94,20 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "" 
       setVoiceError("");
       setListening(true);
       setVoiceStatus("Listening for command");
+      onStatusChange?.("listening");
     };
 
     recognition.onend = () => {
       setListening(false);
       setVoiceStatus("Voice idle");
+      onStatusChange?.(loading ? "thinking" : "idle");
     };
 
     recognition.onerror = (event) => {
       setVoiceError(event?.error ? `Voice error: ${event.error}` : "Voice recognition failed.");
       setListening(false);
       setVoiceStatus("Voice error");
+      onStatusChange?.("idle");
     };
 
     recognition.onresult = (event) => {
@@ -129,6 +136,7 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "" 
       onSend(cleaned);
       setValue("");
       setVoiceStatus("Command sent from voice");
+      onStatusChange?.("thinking");
     };
 
     recognitionRef.current = recognition;
@@ -155,7 +163,7 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "" 
       }
       recognitionRef.current = null;
     };
-  }, [onSend]);
+  }, [loading, onSend, onStatusChange]);
 
   useEffect(() => {
     const text = String(latestAssistantMessage || "").trim();
@@ -181,21 +189,35 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "" 
     utterance.onstart = () => {
       setSpeaking(true);
       setVoiceStatus("COCO speaking");
+      onStatusChange?.("speaking");
     };
 
     utterance.onend = () => {
       setSpeaking(false);
       setVoiceStatus("Voice idle");
+      onStatusChange?.("idle");
     };
 
     utterance.onerror = () => {
       setSpeaking(false);
       setVoiceStatus("Speech output failed");
+      onStatusChange?.("idle");
     };
 
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);
-  }, [latestAssistantMessage, muted, voiceSupported]);
+  }, [latestAssistantMessage, muted, onStatusChange, voiceSupported]);
+
+  useEffect(() => {
+    if (loading && !listening) {
+      onStatusChange?.("thinking");
+      return;
+    }
+
+    if (!loading && !listening && !speaking) {
+      onStatusChange?.("idle");
+    }
+  }, [listening, loading, onStatusChange, speaking]);
 
   const submit = (event) => {
     event.preventDefault();
@@ -288,6 +310,7 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "" 
         {!voiceSupported ? <p className="m-0 text-xs text-slate-400">Voice input is not supported in this browser.</p> : null}
         {voiceError ? <p className="m-0 text-xs text-red-300">{voiceError}</p> : null}
         {voiceSupported ? <p className="m-0 text-xs text-slate-400">{voiceStatus}</p> : null}
+        {loading ? <p className="m-0 animate-pulse text-xs text-blue-200">COCO is thinking and planning actions...</p> : null}
         {speaking ? <p className="m-0 text-xs text-slate-300">Speaking response...</p> : null}
         {voiceSnippet ? <p className="m-0 text-xs text-slate-300">Heard: {voiceSnippet}</p> : null}
       </form>

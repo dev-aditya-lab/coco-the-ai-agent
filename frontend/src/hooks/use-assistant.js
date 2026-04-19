@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
-import { useCallback, useMemo, useState } from "react";
-import { getAssistantHistory, sendAssistantCommand } from "@/services/assistant-api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { getAssistantHistory, getTrackerSummary, sendAssistantCommand } from "@/services/assistant-api";
 
 function makeMessage({ role, content, timestamp, command, response }) {
   const resolvedTimestamp = typeof timestamp === "string" && timestamp.trim()
@@ -44,6 +43,7 @@ function buildGreeting(name) {
 
 export function useAssistant() {
   const [profileName, setProfileName] = useState("");
+  const [agentStatus, setAgentStatus] = useState("idle");
   const [messages, setMessages] = useState([
     makeMessage({
       role: "assistant",
@@ -54,8 +54,14 @@ export function useAssistant() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [loadingTracker, setLoadingTracker] = useState(false);
   const [error, setError] = useState("");
   const [backendOnline, setBackendOnline] = useState(true);
+  const [trackerSummary, setTrackerSummary] = useState({
+    reminders: [],
+    budget: { income: 0, expense: 0, net: 0, recent: [] },
+    habits: { done: 0, skipped: 0, recent: [] },
+  });
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -82,6 +88,23 @@ export function useAssistant() {
     });
   }, []);
 
+  const refreshTrackerSummary = useCallback(async () => {
+    setLoadingTracker(true);
+    try {
+      const summary = await getTrackerSummary();
+      setTrackerSummary(summary);
+      setBackendOnline(true);
+    } catch {
+      setBackendOnline(false);
+    } finally {
+      setLoadingTracker(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshTrackerSummary();
+  }, [refreshTrackerSummary]);
+
   const sendCommand = useCallback(async (command) => {
     const trimmed = typeof command === "string" ? command.trim() : "";
     if (!trimmed || loading) {
@@ -90,6 +113,7 @@ export function useAssistant() {
 
     setError("");
     setLoading(true);
+    setAgentStatus("thinking");
 
     const userMessage = makeMessage({
       role: "user",
@@ -105,11 +129,24 @@ export function useAssistant() {
       if (typeof window !== "undefined") {
         window.localStorage.setItem("coco-profile-name", extractedName);
       }
+      setMessages((prev) => {
+        if (!Array.isArray(prev) || prev.length === 0 || prev[0]?.role !== "assistant") {
+          return prev;
+        }
+
+        const next = [...prev];
+        next[0] = {
+          ...next[0],
+          content: buildGreeting(extractedName),
+        };
+        return next;
+      });
     }
 
     try {
       const response = await sendAssistantCommand(trimmed);
       setBackendOnline(true);
+      setAgentStatus("executing");
 
       const assistantMessage = makeMessage({
         role: "assistant",
@@ -120,9 +157,12 @@ export function useAssistant() {
       });
 
       setMessages((prev) => [...prev, assistantMessage]);
+      setAgentStatus("responding");
 
       const records = await getAssistantHistory(10);
       setHistory(records);
+      await refreshTrackerSummary();
+      setAgentStatus("idle");
     } catch (requestError) {
       const message = requestError instanceof Error ? requestError.message : "Unable to process command.";
       setBackendOnline(false);
@@ -137,10 +177,11 @@ export function useAssistant() {
           timestamp: new Date().toISOString(),
         }),
       ]);
+      setAgentStatus("idle");
     } finally {
       setLoading(false);
     }
-  }, [loading]);
+  }, [loading, refreshTrackerSummary]);
 
   const refreshHistory = useCallback(async () => {
     setLoadingHistory(true);
@@ -179,16 +220,21 @@ export function useAssistant() {
   }, [messages]);
 
   return {
-    messages,
     profileName,
+    messages,
     history,
     loading,
     loadingHistory,
+    loadingTracker,
     error,
     backendOnline,
+    agentStatus,
+    trackerSummary,
     stats,
     latestAssistantMessage,
+    setAgentStatus,
     sendCommand,
     refreshHistory,
+    refreshTrackerSummary,
   };
 }

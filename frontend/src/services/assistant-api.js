@@ -1,4 +1,4 @@
-import { normalizeCommandResponse, normalizeHistoryRecords } from "@/utils/assistant-normalizers";
+import { normalizeCommandResponse, normalizeHistoryRecords, normalizeTrackerSummary } from "@/utils/assistant-normalizers";
 import { requestJson } from "@/services/http-client";
 
 const BASE_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000").replace(/\/$/, "");
@@ -15,6 +15,11 @@ export async function sendAssistantCommand(command) {
 export async function getAssistantHistory(limit = 10) {
   const payload = await requestJson(`${BASE_URL}/api/history?limit=${limit}`);
   return normalizeHistoryRecords(payload);
+}
+
+export async function getTrackerSummary() {
+  const payload = await requestJson(`${BASE_URL}/api/tracker/summary`);
+  return normalizeTrackerSummary(payload);
 }
 
 export function getBackendUrl() {
