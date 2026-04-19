@@ -1,4 +1,4 @@
-const DEFAULT_TIMEOUT_MS = 20000;
+const DEFAULT_TIMEOUT_MS = Number(process.env.NEXT_PUBLIC_REQUEST_TIMEOUT_MS || 60000);
 
 function withTimeout(signal, timeoutMs) {
   const controller = new AbortController();
@@ -19,6 +19,8 @@ export async function requestJson(url, options = {}) {
   const timeout = withTimeout(restOptions.signal, timeoutMs);
 
   try {
+    console.info("[http] request start", { url, timeoutMs });
+
     const response = await fetch(url, {
       ...restOptions,
       signal: timeout.signal,
@@ -41,13 +43,16 @@ export async function requestJson(url, options = {}) {
     return payload;
   } catch (error) {
     if (error?.name === "AbortError") {
+      console.warn("[http] request timeout", { url, timeoutMs });
       throw new Error("Request timed out. Please try again.");
     }
 
     if (String(error?.message || "").toLowerCase().includes("failed to fetch")) {
+      console.error("[http] backend unreachable", { url, error });
       throw new Error("Backend is unreachable. Check backend server and URL.");
     }
 
+    console.error("[http] request failed", { url, error });
     throw error;
   } finally {
     timeout.clear();

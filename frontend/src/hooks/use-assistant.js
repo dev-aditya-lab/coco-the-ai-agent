@@ -111,6 +111,7 @@ export function useAssistant() {
       return;
     }
 
+    console.info("[assistant] send command", { command: trimmed });
     setError("");
     setLoading(true);
     setAgentStatus("thinking");
@@ -145,6 +146,7 @@ export function useAssistant() {
 
     try {
       const response = await sendAssistantCommand(trimmed);
+      console.info("[assistant] command response", { command: trimmed, action: response?.metadata?.planner, success: response?.success });
       setBackendOnline(true);
       setAgentStatus("executing");
 
@@ -165,6 +167,7 @@ export function useAssistant() {
       setAgentStatus("idle");
     } catch (requestError) {
       const message = requestError instanceof Error ? requestError.message : "Unable to process command.";
+      console.error("[assistant] command failed", { command: trimmed, error: requestError });
       setBackendOnline(false);
       setError(message);
 
@@ -191,6 +194,7 @@ export function useAssistant() {
       setBackendOnline(true);
     } catch (requestError) {
       const message = requestError instanceof Error ? requestError.message : "Unable to load history.";
+      console.error("[assistant] history refresh failed", { error: requestError });
       setError(message);
       setBackendOnline(false);
     } finally {
