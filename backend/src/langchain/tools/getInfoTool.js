@@ -4,7 +4,7 @@
  */
 
 import { BaseTool } from "./baseTool.js";
-import { getGroqInfoResponse } from "../services/groqService.js";
+import { getOpenClawTextResponse } from "../services/openclawService.js";
 
 export class GetInfoTool extends BaseTool {
   constructor() {
@@ -45,9 +45,11 @@ export class GetInfoTool extends BaseTool {
       ? "Respond once in natural mixed Hinglish. Do not add a separate translated line."
       : "Respond only in English, in 1-2 short lines.";
 
-    const styledQuery = `${query}\n\nStyle rule: ${styleInstruction}`;
-
-    const response = await getGroqInfoResponse(styledQuery);
+    const response = await getOpenClawTextResponse({
+      systemPrompt: "You are COCO, an assistant that gives concise and accurate information.",
+      styleInstruction,
+      userPrompt: query,
+    });
     return response;
   }
 }

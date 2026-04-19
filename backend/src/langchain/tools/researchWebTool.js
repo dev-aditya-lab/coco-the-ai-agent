@@ -4,7 +4,7 @@
  */
 
 import { BaseTool } from "./baseTool.js";
-import { getGroqInfoResponse } from "../services/groqService.js";
+import { getOpenClawTextResponse } from "../services/openclawService.js";
 import { searchWeb, summarizeResearchResults } from "../services/tavilyService.js";
 import { retainMemory } from "../services/hindsightService.js";
 
@@ -114,7 +114,11 @@ export class ResearchWebTool extends BaseTool {
         ? "If the source summary is in Hindi or the user asked in Hinglish, answer once in natural mixed Hinglish. Do not provide a separate English translation."
         : "Answer only in English.";
 
-      const finalResponse = await getGroqInfoResponse(synthesisPrompt, styleInstruction);
+      const finalResponse = await getOpenClawTextResponse({
+        systemPrompt: "You are COCO, a web research assistant that cites and summarizes reliably.",
+        styleInstruction,
+        userPrompt: synthesisPrompt,
+      });
 
       await retainMemory(`Research query: ${query}\n\nAnswer:\n${finalResponse}\n\nResearch notes:\n${researchSummary}`, {
         context: "web-research",

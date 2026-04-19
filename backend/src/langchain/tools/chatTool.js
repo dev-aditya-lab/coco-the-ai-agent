@@ -4,7 +4,7 @@
  */
 
 import { BaseTool } from "./baseTool.js";
-import { getGroqChatResponse } from "../services/groqService.js";
+import { getOpenClawTextResponse } from "../services/openclawService.js";
 
 export class ChatTool extends BaseTool {
   constructor() {
@@ -51,7 +51,18 @@ export class ChatTool extends BaseTool {
       ? "Respond once in natural mixed Hinglish. Do not add a separate translated line."
       : "Respond only in English, in 1-2 short lines.";
 
-    const response = await getGroqChatResponse(message, history, styleInstruction, memoryContext);
+    const contextBlock = [
+      memoryContext ? `Memory context:\n${memoryContext}` : "",
+      Array.isArray(history) && history.length > 0
+        ? `Recent conversation:\n${JSON.stringify(history.slice(-6), null, 2)}`
+        : "",
+    ].filter(Boolean).join("\n\n");
+
+    const response = await getOpenClawTextResponse({
+      systemPrompt: "You are COCO, a conversational assistant.",
+      styleInstruction,
+      userPrompt: `${contextBlock}\n\nUser message:\n${message}`,
+    });
     return response;
   }
 }

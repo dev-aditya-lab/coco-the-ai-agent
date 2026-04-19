@@ -130,9 +130,7 @@ export async function postCommand(req, res) {
           parameters: step.parameters || {},
           status: step.status || "completed",
           message: step.message || "",
-          details: {
-            source: "autonomous-plan",
-          },
+          details: step.details || {},
         }))
       : [
           {
@@ -154,7 +152,6 @@ export async function postCommand(req, res) {
       context: "conversation",
       metadata: {
         action: result.action,
-        planner: result.metadata?.planner || "groq",
         userName: conversationState.name || "",
         command,
       },
@@ -172,13 +169,13 @@ export async function postCommand(req, res) {
       await retainMemory(`Execution trace for command: ${command}\n${JSON.stringify(compactTrace)}`, {
         context: "execution",
         metadata: {
-          planner: result.metadata?.planner || "groq",
+          planner: result.metadata?.planner || "openclaw",
           action: result.action,
           command,
         },
         tags: [
           "execution",
-          result.metadata?.planner || "groq",
+          result.metadata?.planner || "openclaw",
           stepsExecuted.some((step) => step.status === "failed") ? "had_failure" : "success",
         ],
       });
