@@ -37,6 +37,7 @@ export class ChatTool extends BaseTool {
     const message = this.normalizeString(input.message);
     const style = input.style || "english";
     const history = input.conversationHistory || [];
+    const memoryContext = this.normalizeString(input.memory_context);
 
     if (!message) {
       return this.formatByStyle(
@@ -50,7 +51,7 @@ export class ChatTool extends BaseTool {
       ? "Respond once in natural mixed Hinglish. Do not add a separate translated line."
       : "Respond only in English, in 1-2 short lines.";
 
-    const response = await getGroqChatResponse(message, history, styleInstruction);
+    const response = await getGroqChatResponse(message, history, styleInstruction, memoryContext);
     return response;
   }
 }
