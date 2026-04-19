@@ -47,7 +47,7 @@ export function getGroqInstance(options = {}) {
     throw new Error("GROQ_API_KEY is not set in environment variables");
   }
 
-  const model = options.model || options.modelName || "llama-3.3-70b-versatile";
+  const model = options.model || options.modelName || "qwen/qwen3-32b";
   const temperature = options.temperature !== undefined ? options.temperature : 0.7;
   const maxTokens = options.maxTokens || 1024;
   const cacheKey = JSON.stringify({ model, temperature, maxTokens });

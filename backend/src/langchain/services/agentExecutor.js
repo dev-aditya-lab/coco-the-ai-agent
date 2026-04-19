@@ -82,6 +82,134 @@ class AgentExecutor {
       : "I'm doing great, thanks! I'm ready to help with whatever you need.";
   }
 
+  isCountdownIntent(command) {
+    const normalized = typeof command === "string" ? command.trim().toLowerCase() : "";
+    if (!normalized) {
+      return false;
+    }
+
+    return /\b(countdown|count down)\b/.test(normalized)
+      || /\bstart\b.*\b(\d+)\b.*\b(second|seconds|sec|s)\b/.test(normalized)
+      || /\b(\d+)\s*(second|seconds|sec|s)\b.*\bcountdown\b/.test(normalized);
+  }
+
+  extractCountdownSeconds(command) {
+    const text = typeof command === "string" ? command : "";
+    const match = text.match(/\b(\d{1,3})\b\s*(?:second|seconds|sec|s)?/i);
+    if (!match || !match[1]) {
+      return 10;
+    }
+
+    const parsed = Number(match[1]);
+    if (!Number.isFinite(parsed)) {
+      return 10;
+    }
+
+    return Math.min(60, Math.max(1, parsed));
+  }
+
+  buildCountdownResponse(seconds, responseStyle) {
+    const values = Array.from({ length: seconds }, (_, index) => seconds - index).join(", ");
+    return responseStyle === "bilingual"
+      ? `Countdown shuru: ${values}.`
+      : `Countdown started: ${values}.`;
+  }
+
+  isApplicationWritingIntent(command) {
+    const normalized = typeof command === "string" ? command.trim().toLowerCase() : "";
+    if (!normalized) {
+      return false;
+    }
+
+    const hasWriteIntent = /\b(write|draft|create|make)\b/.test(normalized);
+    const hasApplicationWord = /\b(application|letter)\b/.test(normalized);
+    const hasHackathonWord = /\bhackathon\b/.test(normalized);
+
+    return hasWriteIntent && hasApplicationWord && hasHackathonWord;
+  }
+
+  extractInstitutionName(command) {
+    const text = typeof command === "string" ? command.trim() : "";
+    const explicitCollegeMatch = text.match(/\bcollege\s+([a-z][a-z\s&.'-]{2,80})/i);
+    const locationMatch = text.match(/\b(?:at|on)\s+(?:our\s+)?([a-z][a-z\s&.'-]{2,80})/i);
+    const fallbackMatch = text.match(/\bfor\s+([a-z][a-z\s&.'-]{2,80})/i);
+
+    const raw = explicitCollegeMatch?.[1]?.trim()
+      || locationMatch?.[1]?.trim()
+      || fallbackMatch?.[1]?.trim()
+      || "Ramgarh Engineering College";
+
+    const cleaned = raw
+      .replace(/\b(for\s+conducting|conducting\s+a?)\b.*$/i, "")
+      .replace(/\s+/g, " ")
+      .replace(/[.\s]+$/, "")
+      .trim();
+
+    const normalized = cleaned || "Ramgarh Engineering College";
+
+    return normalized
+      .replace(/\s+/g, " ")
+      .replace(/[.\s]+$/, "")
+      .split(" ")
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
+  buildHackathonApplicationContent(collegeName) {
+    return [
+      "To,",
+      "The Principal,",
+      `${collegeName}`,
+      "",
+      "Subject: Application for permission to conduct a Hackathon",
+      "",
+      "Respected Sir/Madam,",
+      "",
+      "I hope you are doing well. I am writing to request permission to organize a Hackathon at our college. The event will encourage students to work on practical problem-solving, innovation, and teamwork in a structured and competitive format.",
+      "",
+      "The Hackathon will provide students with hands-on exposure to real-world technical challenges, mentorship opportunities, and collaborative learning. We plan to ensure proper coordination for venue, schedule, technical resources, and discipline throughout the event.",
+      "",
+      "I kindly request you to grant approval for conducting this Hackathon at the earliest. We will submit a detailed event plan, budget, and timeline for your review if required.",
+      "",
+      "Thank you for your support.",
+      "",
+      "Yours faithfully,",
+      "Student Coordinator",
+    ].join("\n");
+  }
+
+  sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async runCountdown(seconds, responseStyle) {
+    const executedSteps = [];
+
+    for (let current = seconds; current >= 1; current -= 1) {
+      executedSteps.push({
+        stepNumber: executedSteps.length + 1,
+        action: "chat",
+        status: "completed",
+        message: responseStyle === "bilingual"
+          ? `Countdown: ${current}`
+          : `Countdown: ${current}`,
+        parameters: { seconds: current },
+        details: {},
+      });
+
+      if (current > 1) {
+        await this.sleep(1000);
+      }
+    }
+
+    const result = responseStyle === "bilingual"
+      ? `Countdown complete: ${seconds} se 1 tak.`
+      : `Countdown complete: ${seconds} to 1.`;
+
+    return { result, executedSteps };
+  }
+
   isEmailIntent(command) {
     const normalized = typeof command === "string" ? command.trim().toLowerCase() : "";
     if (!normalized) {
@@ -375,6 +503,59 @@ class AgentExecutor {
             autonomousMode: false,
             planner: "shortcut",
             shortcut: this.isGreetingIntent(userInput) ? "greeting" : "smalltalk",
+          },
+        };
+      }
+
+      if (this.isCountdownIntent(userInput)) {
+        const seconds = this.extractCountdownSeconds(userInput);
+        const countdown = await this.runCountdown(seconds, responseStyle);
+        return {
+          action: "chat",
+          result: countdown.result,
+          metadata: {
+            duration: Date.now() - startTime,
+            style: responseStyle,
+            parameters: {
+              seconds,
+              message: userInput,
+            },
+            executedSteps: countdown.executedSteps,
+            autonomousMode: false,
+            planner: "shortcut",
+            shortcut: "countdown",
+          },
+        };
+      }
+
+      if (this.isApplicationWritingIntent(userInput)) {
+        const executedSteps = [];
+        const collegeName = this.extractInstitutionName(userInput);
+        const plannedParams = this.prepareParameters(
+          "create_file",
+          {
+            filename: "hackathon_application.txt",
+            content: this.buildHackathonApplicationContent(collegeName),
+          },
+          userInput,
+          memoryContext,
+          responseStyle,
+          history,
+        );
+
+        const execution = await this.executeSingleStep("create_file", plannedParams, 1, executedSteps);
+
+        return {
+          action: "create_file",
+          result: execution.message,
+          metadata: {
+            duration: Date.now() - startTime,
+            style: responseStyle,
+            parameters: plannedParams,
+            executedSteps,
+            autonomousMode: false,
+            planner: "shortcut",
+            shortcut: "write_application",
           },
         };
       }
