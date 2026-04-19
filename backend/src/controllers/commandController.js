@@ -123,16 +123,27 @@ export async function postCommand(req, res) {
       name: conversationState.name || result.metadata?.parameters?.name || "",
     };
 
-    const stepsExecuted = [
-      {
-        stepNumber: 1,
-        action: result.action,
-        parameters,
-        status: result.action === "error" ? "failed" : "completed",
-        message: result.result,
-        details: result.metadata,
-      },
-    ];
+    const stepsExecuted = Array.isArray(result.metadata?.executedSteps) && result.metadata.executedSteps.length > 0
+      ? result.metadata.executedSteps.map((step, index) => ({
+          stepNumber: step.stepNumber || index + 1,
+          action: step.action || "chat",
+          parameters: step.parameters || {},
+          status: step.status || "completed",
+          message: step.message || "",
+          details: {
+            source: "autonomous-plan",
+          },
+        }))
+      : [
+          {
+            stepNumber: 1,
+            action: result.action,
+            parameters,
+            status: result.action === "error" ? "failed" : "completed",
+            message: result.result,
+            details: result.metadata,
+          },
+        ];
 
     const finalMessage = result.result;
 
@@ -143,11 +154,35 @@ export async function postCommand(req, res) {
       context: "conversation",
       metadata: {
         action: result.action,
+        planner: result.metadata?.planner || "groq",
         userName: conversationState.name || "",
         command,
       },
       tags: conversationState.name ? ["conversation", conversationState.name.toLowerCase()] : ["conversation"],
     });
+
+    if (stepsExecuted.length > 0) {
+      const compactTrace = stepsExecuted.map((step) => ({
+        stepNumber: step.stepNumber,
+        action: step.action,
+        status: step.status,
+        message: typeof step.message === "string" ? step.message.slice(0, 240) : "",
+      }));
+
+      await retainMemory(`Execution trace for command: ${command}\n${JSON.stringify(compactTrace)}`, {
+        context: "execution",
+        metadata: {
+          planner: result.metadata?.planner || "groq",
+          action: result.action,
+          command,
+        },
+        tags: [
+          "execution",
+          result.metadata?.planner || "groq",
+          stepsExecuted.some((step) => step.status === "failed") ? "had_failure" : "success",
+        ],
+      });
+    }
 
     if (extractedName && !isNameLookupIntent(command)) {
       await retainMemory(`The user introduced themselves as ${extractedName}.`, {
