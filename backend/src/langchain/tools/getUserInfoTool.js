@@ -4,6 +4,7 @@
  */
 
 import { BaseTool } from "./baseTool.js";
+import { recallMemory } from "../services/hindsightService.js";
 
 export class GetUserInfoTool extends BaseTool {
   constructor() {
@@ -39,7 +40,16 @@ export class GetUserInfoTool extends BaseTool {
 
       switch (infoType) {
         case "name":
-          userInfo = this.normalizeString(input.name) || process.env.COCO_USER_NAME || "Friend";
+          userInfo = this.normalizeString(input.name) || process.env.COCO_USER_NAME || "";
+
+          if (!this.normalizeString(userInfo)) {
+            const recallResponse = await recallMemory("What is the user's name?", {
+              types: ["world", "observation", "experience"],
+              budget: "low",
+              maxTokens: 600,
+            });
+            userInfo = this.normalizeString(recallResponse?.results?.[0]?.text) || "Friend";
+          }
           break;
 
         case "email":
@@ -56,6 +66,19 @@ export class GetUserInfoTool extends BaseTool {
             email: process.env.COCO_USER_EMAIL || "Not set",
             phone: process.env.COCO_USER_PHONE || "Not set",
           };
+
+          if (userInfo.name === "Friend") {
+            const recallResponse = await recallMemory("Tell me about the user's profile", {
+              types: ["world", "observation", "experience"],
+              budget: "low",
+              maxTokens: 800,
+            });
+
+            const profileHint = this.normalizeString(recallResponse?.results?.[0]?.text);
+            if (profileHint) {
+              userInfo = profileHint;
+            }
+          }
           break;
 
         default:
