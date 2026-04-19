@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useCallback, useMemo, useState } from "react";
 import { getAssistantHistory, sendAssistantCommand } from "@/services/assistant-api";
 
@@ -18,11 +19,35 @@ function makeMessage({ role, content, timestamp, command, response }) {
   };
 }
 
+function extractNameFromText(text) {
+  const value = typeof text === "string" ? text.trim() : "";
+  if (!value) {
+    return "";
+  }
+
+  const match = value.match(/\b(?:i am|i'm|my name is|mera naam)\s+([a-z][a-z\s'-]{1,30})/i);
+  const name = match?.[1] ? match[1].trim().split(" ").slice(0, 2).join(" ") : "";
+
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function buildGreeting(name) {
+  if (name) {
+    return `Welcome back, ${name}. COCO is ready for your next goal.`;
+  }
+  return "COCO is ready. Ask anything in English or Hinglish.";
+}
+
 export function useAssistant() {
+  const [profileName, setProfileName] = useState("");
   const [messages, setMessages] = useState([
     makeMessage({
       role: "assistant",
-      content: "COCO is ready. Ask anything in English or Hinglish.",
+      content: buildGreeting(""),
       timestamp: null,
     }),
   ]);
@@ -31,6 +56,31 @@ export function useAssistant() {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [error, setError] = useState("");
   const [backendOnline, setBackendOnline] = useState(true);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const savedName = window.localStorage.getItem("coco-profile-name") || "";
+    if (!savedName) {
+      return;
+    }
+
+    setProfileName(savedName);
+    setMessages((prev) => {
+      if (!Array.isArray(prev) || prev.length === 0 || prev[0]?.role !== "assistant") {
+        return prev;
+      }
+
+      const next = [...prev];
+      next[0] = {
+        ...next[0],
+        content: buildGreeting(savedName),
+      };
+      return next;
+    });
+  }, []);
 
   const sendCommand = useCallback(async (command) => {
     const trimmed = typeof command === "string" ? command.trim() : "";
@@ -48,6 +98,14 @@ export function useAssistant() {
       timestamp: new Date().toISOString(),
     });
     setMessages((prev) => [...prev, userMessage]);
+
+    const extractedName = extractNameFromText(trimmed);
+    if (extractedName) {
+      setProfileName(extractedName);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("coco-profile-name", extractedName);
+      }
+    }
 
     try {
       const response = await sendAssistantCommand(trimmed);
@@ -122,6 +180,7 @@ export function useAssistant() {
 
   return {
     messages,
+    profileName,
     history,
     loading,
     loadingHistory,

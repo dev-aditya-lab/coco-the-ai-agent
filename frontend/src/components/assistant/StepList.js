@@ -1,4 +1,5 @@
 import { CheckCircle2, CircleX } from "lucide-react";
+import ActionResultCard from "@/components/assistant/ActionResultCard";
 
 export default function StepList({ steps }) {
   if (!Array.isArray(steps) || steps.length === 0) {
@@ -19,6 +20,7 @@ export default function StepList({ steps }) {
                 Step {step.stepNumber}: {step.action}
               </p>
               <p className="m-0.5 text-xs text-slate-300">{step.message}</p>
+              <ActionResultCard step={step} />
             </div>
           </div>
         );
