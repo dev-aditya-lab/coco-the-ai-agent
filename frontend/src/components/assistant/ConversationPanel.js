@@ -22,7 +22,7 @@ function MessageItem({ item }) {
           <StepList steps={item.response.steps} />
           <details className="mt-2 rounded-lg border border-slate-700 bg-slate-950/60 p-2">
             <summary className="cursor-pointer text-xs text-slate-400">Raw backend payload</summary>
-            <pre className="mt-2 whitespace-pre-wrap break-words text-[11px] text-slate-300">{JSON.stringify(item.response.raw, null, 2)}</pre>
+            <pre className="mt-2 whitespace-pre-wrap wrap-break-word text-[11px] text-slate-300">{JSON.stringify(item.response.raw, null, 2)}</pre>
           </details>
         </>
       ) : null}
@@ -37,12 +37,12 @@ export default function ConversationPanel({ messages, loading }) {
         <h2 className="text-sm font-semibold text-slate-100">Conversation</h2>
       </div>
 
-      <div className="grid max-h-[620px] gap-3 overflow-auto p-4">
+      <div className="grid max-h-155 gap-3 overflow-auto p-4">
         {messages.map((item) => (
           <MessageItem key={item.id} item={item} />
         ))}
 
-        {loading ? <p className="m-0 text-sm text-slate-400">Processing command...</p> : null}
+        {loading ? <p className="m-0 animate-pulse text-sm text-blue-200">COCO is thinking, planning, and executing...</p> : null}
       </div>
     </section>
   );

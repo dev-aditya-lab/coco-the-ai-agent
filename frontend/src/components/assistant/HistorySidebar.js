@@ -18,7 +18,7 @@ export default function HistorySidebar({ records, loadingHistory, onRefresh }) {
         </button>
       </div>
 
-      <div className="grid max-h-[760px] gap-3 overflow-auto p-4">
+      <div className="grid max-h-190 gap-3 overflow-auto p-4">
         {records.length === 0 ? <p className="m-0 text-sm text-slate-400">No history available.</p> : null}
 
         {records.map((record) => (
