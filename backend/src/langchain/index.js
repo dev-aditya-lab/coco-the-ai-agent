@@ -12,6 +12,7 @@ export { PlayYoutubeTool } from "./tools/playYoutubeTool.js";
 export { CreateFileTool } from "./tools/createFileTool.js";
 export { GetInfoTool } from "./tools/getInfoTool.js";
 export { GetUserInfoTool } from "./tools/getUserInfoTool.js";
+export { ResearchWebTool } from "./tools/researchWebTool.js";
 
 // Registry
 export { toolRegistry, getToolRegistry } from "./toolRegistry.js";
@@ -24,6 +25,19 @@ export {
   getGroqActionPlan,
   getGroqStreamingResponse,
 } from "./services/groqService.js";
+
+export {
+  getTavilyClient,
+  searchWeb,
+  summarizeResearchResults,
+} from "./services/tavilyService.js";
+
+export {
+  buildMemoryContext,
+  retainMemory,
+  recallMemory,
+  reflectMemory,
+} from "./services/hindsightService.js";
 
 export {
   getAgentExecutor,
