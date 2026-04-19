@@ -12,6 +12,11 @@ import { CreateFileTool } from "./tools/createFileTool.js";
 import { GetInfoTool } from "./tools/getInfoTool.js";
 import { GetUserInfoTool } from "./tools/getUserInfoTool.js";
 import { ResearchWebTool } from "./tools/researchWebTool.js";
+import { SendEmailTool } from "./tools/sendEmailTool.js";
+import { SummarizeInboxTool } from "./tools/summarizeInboxTool.js";
+import { ScheduleReminderTool } from "./tools/scheduleReminderTool.js";
+import { TrackBudgetTool } from "./tools/trackBudgetTool.js";
+import { TrackHabitTool } from "./tools/trackHabitTool.js";
 
 class ToolRegistry {
   constructor() {
@@ -32,6 +37,11 @@ class ToolRegistry {
     this.register(new GetInfoTool());
     this.register(new GetUserInfoTool());
     this.register(new ResearchWebTool());
+    this.register(new SendEmailTool());
+    this.register(new SummarizeInboxTool());
+    this.register(new ScheduleReminderTool());
+    this.register(new TrackBudgetTool());
+    this.register(new TrackHabitTool());
   }
 
   /**

@@ -4,85 +4,17 @@
  */
 
 import { getToolRegistry } from "../toolRegistry.js";
-import { getGroqInstance, getGroqActionPlan, getGroqAutonomousStep } from "./groqService.js";
-import { getOpenClawActionPlan, getOpenClawAutonomousStep } from "./openclawService.js";
 import { env } from "../../config/env.js";
+import { getOpenClawActionPlan, getOpenClawAutonomousStep } from "./openclawService.js";
 
 class AgentExecutor {
   constructor(options = {}) {
     this.registry = getToolRegistry();
-    this.maxIterations = options.maxIterations || 10;
+    this.maxIterations = options.maxIterations || 8;
     this.openClawEnabled = options.openClawEnabled ?? env.openclawEnabled;
-    this.openClawRuntimeAvailable = true;
     this.autonomousEnabled = options.autonomousEnabled ?? env.agentAutonomousMode;
     this.maxAutonomousIterations = options.maxAutonomousIterations || env.agentAutonomousMaxIterations || 4;
     this.verbose = options.verbose || false;
-    this.llmOptions = options.llmOptions || {};
-    this.llm = null;
-  }
-
-  async planAction(userInput, history, memoryContext) {
-    if (!this.openClawEnabled || !this.openClawRuntimeAvailable) {
-      return {
-        planner: "groq",
-        plan: await getGroqActionPlan(userInput, history, memoryContext),
-      };
-    }
-
-    try {
-      return {
-        planner: "openclaw",
-        plan: await getOpenClawActionPlan(userInput, history, memoryContext),
-      };
-    } catch (error) {
-      this.log(`OpenClaw plan failed, falling back to Groq: ${error.message}`);
-      this.openClawRuntimeAvailable = false;
-      return {
-        planner: "groq",
-        plan: await getGroqActionPlan(userInput, history, memoryContext),
-      };
-    }
-  }
-
-  async planAutonomousStep(userInput, history, memoryContext, executedSteps, remainingIterations) {
-    if (!this.openClawEnabled || !this.openClawRuntimeAvailable) {
-      return {
-        planner: "groq",
-        stepPlan: await getGroqAutonomousStep({
-          goal: userInput,
-          history,
-          memoryContext,
-          completedSteps: executedSteps,
-          remainingIterations,
-        }),
-      };
-    }
-
-    try {
-      return {
-        planner: "openclaw",
-        stepPlan: await getOpenClawAutonomousStep({
-          goal: userInput,
-          history,
-          memoryContext,
-          completedSteps: executedSteps,
-          remainingIterations,
-        }),
-      };
-    } catch (error) {
-      this.log(`OpenClaw autonomous step failed, falling back to Groq: ${error.message}`);
-      this.openClawRuntimeAvailable = false;
-      return {
-        planner: "groq",
-        stepPlan: await getGroqAutonomousStep({
-          goal: userInput,
-          history,
-          memoryContext,
-          completedSteps: executedSteps,
-          remainingIterations,
-        }),
-      };
-    }
   }
 
   /**
@@ -105,10 +37,10 @@ class AgentExecutor {
     return HINGLISH_HINT_REGEX.test(command) ? "bilingual" : "english";
   }
 
-  normalizePlan(actionPlan, userInput) {
+  normalizePlan(actionPlan) {
     if (Array.isArray(actionPlan?.actions) && actionPlan.actions.length > 0) {
       return actionPlan.actions
-        .slice(0, 4)
+        .slice(0, this.maxIterations)
         .map((step) => ({
           action: step?.action || "chat",
           parameters: step?.parameters && typeof step.parameters === "object" ? { ...step.parameters } : {},
@@ -118,14 +50,12 @@ class AgentExecutor {
     return [
       {
         action: actionPlan?.action || "chat",
-        parameters: actionPlan?.parameters && typeof actionPlan.parameters === "object"
-          ? { ...actionPlan.parameters }
-          : {},
+        parameters: actionPlan?.parameters && typeof actionPlan.parameters === "object" ? { ...actionPlan.parameters } : {},
       },
     ];
   }
 
-  prepareParameters(action, parameters, userInput, memoryContext, responseStyle) {
+  prepareParameters(action, parameters, userInput, memoryContext, responseStyle, history = []) {
     const next = parameters && typeof parameters === "object" ? { ...parameters } : {};
 
     if (action === "chat" && !next.message) {
@@ -144,14 +74,52 @@ class AgentExecutor {
       next.query = userInput;
     }
 
+    if (action === "send_email" && !next.mode) {
+      next.mode = "draft";
+    }
+
+    if (action === "schedule_reminder" && !next.title) {
+      next.title = userInput;
+    }
+
+    if (action === "track_budget" && !next.category) {
+      next.category = "general";
+    }
+
+    if (action === "track_habit" && !next.habit) {
+      next.habit = userInput;
+    }
+
     if (memoryContext) {
       next.memory_context = memoryContext;
+    }
+
+    if (Array.isArray(history) && history.length > 0 && action === "chat") {
+      next.conversationHistory = history.slice(-6);
     }
 
     next._response_style = responseStyle;
     next.style = responseStyle;
 
     return next;
+  }
+
+  normalizeToolResult(result) {
+    if (result && typeof result === "object") {
+      const message = typeof result.message === "string" && result.message.trim()
+        ? result.message
+        : JSON.stringify(result);
+      return {
+        message,
+        details: result,
+      };
+    }
+
+    const message = typeof result === "string" && result.trim() ? result : "Done.";
+    return {
+      message,
+      details: {},
+    };
   }
 
   async executeSingleStep(action, parameters, stepNumber, executedSteps) {
@@ -163,30 +131,35 @@ class AgentExecutor {
         status: "failed",
         message: toolError,
         parameters,
+        details: {},
       });
 
       return {
         ok: false,
         action,
         message: toolError,
+        details: {},
       };
     }
 
     this.log(`Executing tool: ${action}`);
-    const stepResult = await this.registry.executeTool(action, parameters);
+    const rawResult = await this.registry.executeTool(action, parameters);
+    const normalized = this.normalizeToolResult(rawResult);
 
     executedSteps.push({
       stepNumber,
       action,
       status: "completed",
-      message: stepResult,
+      message: normalized.message,
       parameters,
+      details: normalized.details,
     });
 
     return {
       ok: true,
       action,
-      message: stepResult,
+      message: normalized.message,
+      details: normalized.details,
     };
   }
 
@@ -201,11 +174,10 @@ class AgentExecutor {
     this.log(`Executing: "${userInput}"`);
 
     try {
-      if (!this.llm) {
-        this.llm = getGroqInstance(this.llmOptions);
+      if (!this.openClawEnabled) {
+        throw new Error("OpenClaw is disabled. Set OPENCLAW_ENABLED=true.");
       }
 
-      // Detect response style
       const responseStyle = this.detectResponseStyle(userInput);
       this.log(`Detected style: ${responseStyle}`);
 
@@ -214,18 +186,15 @@ class AgentExecutor {
         let lastAction = "chat";
         let lastResult = "";
         let lastParameters = {};
-        let plannerUsed = "groq";
 
         for (let iteration = 0; iteration < this.maxAutonomousIterations; iteration += 1) {
-          const planned = await this.planAutonomousStep(
-            userInput,
+          const stepPlan = await getOpenClawAutonomousStep({
+            goal: userInput,
             history,
             memoryContext,
-            executedSteps,
-            this.maxAutonomousIterations - iteration
-          );
-          const stepPlan = planned.stepPlan;
-          plannerUsed = planned.planner;
+            completedSteps: executedSteps,
+            remainingIterations: this.maxAutonomousIterations - iteration,
+          });
 
           this.log(`Autonomous step plan: ${JSON.stringify(stepPlan)}`);
 
@@ -240,7 +209,7 @@ class AgentExecutor {
                 parameters: lastParameters,
                 executedSteps,
                 autonomousMode: true,
-                planner: plannerUsed,
+                planner: "openclaw",
               },
             };
           }
@@ -251,7 +220,8 @@ class AgentExecutor {
             stepPlan?.next_action?.parameters || {},
             userInput,
             memoryContext,
-            responseStyle
+            responseStyle,
+            history
           );
 
           const stepNumber = executedSteps.length + 1;
@@ -271,7 +241,7 @@ class AgentExecutor {
                 parameters: lastParameters,
                 executedSteps,
                 autonomousMode: true,
-                planner: plannerUsed,
+                planner: "openclaw",
                 error: "Tool not found",
               },
             };
@@ -280,25 +250,22 @@ class AgentExecutor {
 
         return {
           action: lastAction,
-          result: lastResult || "I completed as much as I could in autonomous mode.",
+          result: lastResult || "I completed as much as possible in autonomous mode.",
           metadata: {
             duration: Date.now() - startTime,
             style: responseStyle,
             parameters: lastParameters,
             executedSteps,
             autonomousMode: true,
-            planner: plannerUsed,
+            planner: "openclaw",
             maxIterationsReached: true,
           },
         };
       }
 
-      // Get action plan from LLM
-      const planned = await this.planAction(userInput, history, memoryContext);
-      const actionPlan = planned.plan;
+      const actionPlan = await getOpenClawActionPlan(userInput, history, memoryContext);
       this.log(`Action plan: ${JSON.stringify(actionPlan)}`);
-
-      const planSteps = this.normalizePlan(actionPlan, userInput);
+      const planSteps = this.normalizePlan(actionPlan);
       const executedSteps = [];
       let lastAction = "chat";
       let lastResult = "";
@@ -307,7 +274,7 @@ class AgentExecutor {
       for (let index = 0; index < planSteps.length; index += 1) {
         const current = planSteps[index] || {};
         const action = current.action || "chat";
-        const parameters = this.prepareParameters(action, current.parameters || {}, userInput, memoryContext, responseStyle);
+        const parameters = this.prepareParameters(action, current.parameters || {}, userInput, memoryContext, responseStyle, history);
         const execution = await this.executeSingleStep(action, parameters, index + 1, executedSteps);
 
         lastAction = execution.action;
@@ -315,17 +282,7 @@ class AgentExecutor {
         lastParameters = parameters;
 
         if (!execution.ok) {
-          return {
-            action: lastAction,
-            result: lastResult,
-            metadata: {
-              duration: Date.now() - startTime,
-              style: responseStyle,
-              parameters: lastParameters,
-              executedSteps,
-              error: "Tool not found",
-            },
-          };
+          break;
         }
       }
 
@@ -337,7 +294,7 @@ class AgentExecutor {
           style: responseStyle,
           parameters: lastParameters,
           executedSteps,
-          planner: planned.planner,
+          planner: "openclaw",
         },
       };
     } catch (error) {
@@ -345,10 +302,11 @@ class AgentExecutor {
 
       return {
         action: "error",
-        result: `Sorry, something went wrong: ${error.message}`,
+        result: `Sorry, something went wrong in orchestration: ${error.message}`,
         metadata: {
           duration: Date.now() - startTime,
           error: error.message,
+          planner: "openclaw",
         },
       };
     }

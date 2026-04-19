@@ -8,6 +8,26 @@ const execFileAsync = promisify(execFile);
 const OPENCLAW_RETRY_BACKOFF_MS = 2 * 60 * 1000;
 let openclawUnavailableUntil = 0;
 
+function compactText(value, maxChars) {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text || maxChars <= 0) {
+    return "";
+  }
+
+  return text.length > maxChars ? `${text.slice(0, maxChars)}...` : text;
+}
+
+function compactHistory(history) {
+  if (!Array.isArray(history) || env.openclawMaxHistoryEntries <= 0) {
+    return [];
+  }
+
+  return history.slice(-env.openclawMaxHistoryEntries).map((entry) => ({
+    role: entry?.role === "assistant" ? "assistant" : "user",
+    content: compactText(entry?.content, 240),
+  }));
+}
+
 function parseModelJson(content) {
   const raw = typeof content === "string" ? content.trim() : "";
   if (!raw) {
@@ -99,15 +119,19 @@ async function runOpenClawJson(args) {
 }
 
 async function runOpenClawModelPrompt(prompt) {
-  const payload = await runOpenClawJson([
+  const args = [
     "infer",
     "model",
     "run",
     "--local",
     "--json",
+    "--model",
+    env.openclawModel,
     "--prompt",
     prompt,
-  ]);
+  ];
+
+  const payload = await runOpenClawJson(args);
 
   const output = Array.isArray(payload?.outputs) && payload.outputs.length > 0
     ? payload.outputs[0]
@@ -121,12 +145,29 @@ async function runOpenClawModelPrompt(prompt) {
   return text;
 }
 
+export async function getOpenClawTextResponse({
+  userPrompt,
+  systemPrompt = "You are COCO, a practical assistant.",
+  styleInstruction = "Respond in concise English.",
+} = {}) {
+  const safeUserPrompt = compactText(userPrompt, 5000);
+  if (!safeUserPrompt) {
+    return "";
+  }
+
+  const prompt = `${systemPrompt}\n\nStyle rules:\n${styleInstruction}\n\nUser input:\n${safeUserPrompt}`;
+  return runOpenClawModelPrompt(prompt);
+}
+
 export async function getOpenClawActionPlan(command, history = [], memoryContext = "") {
+  const compactedHistory = compactHistory(history);
+  const compactedMemory = compactText(memoryContext, env.openclawMaxMemoryChars) || "(none)";
+
   const plannerPrompt = `You are an AI assistant that converts user commands into structured action plans.
 Return ONLY a valid JSON object, nothing else.
 Do not wrap in markdown or add any commentary.
 
-Allowed actions: chat, open_app, open_website, play_youtube, create_file, get_info, get_user_info, research_web
+Allowed actions: chat, open_app, open_website, play_youtube, create_file, get_info, get_user_info, research_web, send_email, summarize_inbox, schedule_reminder, track_budget, track_habit
 
 Use research_web for internet research, current information, latest news, source-backed answers, or when the user explicitly asks to research something online.
 
@@ -155,10 +196,10 @@ Rules:
 - Do not return extra keys.
 
 Conversation history (last 6):
-${JSON.stringify(Array.isArray(history) ? history.slice(-6) : [], null, 2)}
+${JSON.stringify(compactedHistory, null, 2)}
 
 Memory context:
-${memoryContext || "(none)"}
+${compactedMemory}
 
 User command:
 ${command}`;
@@ -186,6 +227,9 @@ export async function getOpenClawAutonomousStep(input = {}) {
     remainingIterations = 1,
   } = input;
 
+  const compactedHistory = compactHistory(history);
+  const compactedMemory = compactText(memoryContext, env.openclawMaxMemoryChars) || "(none)";
+
   const plannerPrompt = `You are an autonomous AI planner for a tool-using assistant.
 You work in a loop: observe previous tool outputs, decide whether goal is complete, else choose exactly one next tool action.
 
@@ -194,7 +238,7 @@ Return ONLY valid JSON with this exact shape:
   "done": true_or_false,
   "final_response": "string for the user when done, else empty string",
   "next_action": {
-    "action": "chat|open_app|open_website|play_youtube|create_file|get_info|get_user_info|research_web",
+    "action": "chat|open_app|open_website|play_youtube|create_file|get_info|get_user_info|research_web|send_email|summarize_inbox|schedule_reminder|track_budget|track_habit",
     "parameters": {}
   }
 }
@@ -207,10 +251,10 @@ Rules:
 - Prefer concise parameters.
 
 Conversation history (last 6):
-${JSON.stringify(Array.isArray(history) ? history.slice(-6) : [], null, 2)}
+${JSON.stringify(compactedHistory, null, 2)}
 
 Memory context:
-${memoryContext || "(none)"}
+${compactedMemory}
 
 Planner state:
 ${JSON.stringify({
@@ -221,7 +265,7 @@ ${JSON.stringify({
         stepNumber: step.stepNumber,
         action: step.action,
         status: step.status,
-        message: typeof step.message === "string" ? step.message.slice(0, 800) : "",
+        message: compactText(step.message, env.openclawMaxStepMessageChars),
       }))
     : [],
 }, null, 2)}`;

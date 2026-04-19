@@ -13,23 +13,21 @@ export { CreateFileTool } from "./tools/createFileTool.js";
 export { GetInfoTool } from "./tools/getInfoTool.js";
 export { GetUserInfoTool } from "./tools/getUserInfoTool.js";
 export { ResearchWebTool } from "./tools/researchWebTool.js";
+export { SendEmailTool } from "./tools/sendEmailTool.js";
+export { SummarizeInboxTool } from "./tools/summarizeInboxTool.js";
+export { ScheduleReminderTool } from "./tools/scheduleReminderTool.js";
+export { TrackBudgetTool } from "./tools/trackBudgetTool.js";
+export { TrackHabitTool } from "./tools/trackHabitTool.js";
 
 // Registry
 export { toolRegistry, getToolRegistry } from "./toolRegistry.js";
 
 // Services
-export {
-  getGroqInstance,
-  getGroqChatResponse,
-  getGroqInfoResponse,
-  getGroqActionPlan,
-  getGroqAutonomousStep,
-  getGroqStreamingResponse,
-} from "./services/groqService.js";
 
 export {
   getOpenClawActionPlan,
   getOpenClawAutonomousStep,
+  getOpenClawTextResponse,
 } from "./services/openclawService.js";
 
 export {
