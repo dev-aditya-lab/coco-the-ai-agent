@@ -93,6 +93,58 @@ class AgentExecutor {
     return hasEmailVerb && hasRecipient;
   }
 
+  isYoutubeIntent(command) {
+    const normalized = typeof command === "string" ? command.trim().toLowerCase() : "";
+    if (!normalized) {
+      return false;
+    }
+
+    const hasYoutubeWord = /\b(youtube|yt)\b/.test(normalized);
+    const hasMediaVerb = /\b(play|search|find)\b/.test(normalized);
+    const hasMediaNoun = /\b(song|songs|music|video|videos|track|playlist)\b/.test(normalized);
+
+    return hasYoutubeWord || (hasMediaVerb && hasMediaNoun);
+  }
+
+  extractYoutubeQuery(command) {
+    const text = typeof command === "string" ? command.trim() : "";
+    if (!text) {
+      return "";
+    }
+
+    const lowered = text.toLowerCase();
+
+    if (/^\s*(yes|haan|ha|ok|okay|sure)\s*$/i.test(text)) {
+      return "";
+    }
+
+    const explicitMatch =
+      text.match(/(?:search|find|play)\s+(.+?)\s+(?:on\s+)?(?:youtube|yt)\b/i)
+      || text.match(/(?:youtube|yt)\s+(?:for\s+)?(.+)$/i)
+      || text.match(/(?:search|find|play)\s+(.+)$/i);
+
+    let query = explicitMatch && explicitMatch[1] ? explicitMatch[1].trim() : text;
+
+    query = query
+      .replace(/\b(on\s+)?youtube\b/gi, "")
+      .replace(/\byt\b/gi, "")
+      .replace(/\b(play|search|find|a|an|the)\b/gi, "")
+      .replace(/\b(from|on|at|to|for|with)\s*$/i, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (!query) {
+      if (lowered.includes("lofi")) {
+        return "lofi songs";
+      }
+      if (lowered.includes("any song") || lowered.includes("any music")) {
+        return "trending songs";
+      }
+    }
+
+    return query;
+  }
+
   async extractEmailParams(command, responseStyle = "english") {
     const text = typeof command === "string" ? command.trim() : "";
     const toMatch = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
@@ -198,6 +250,10 @@ class AgentExecutor {
 
     if (action === "research_web" && !next.query) {
       next.query = userInput;
+    }
+
+    if (action === "play_youtube" && !next.query) {
+      next.query = this.extractYoutubeQuery(userInput) || userInput;
     }
 
     if (action === "send_email" && !next.mode) {
@@ -347,6 +403,35 @@ class AgentExecutor {
             autonomousMode: false,
             planner: "shortcut",
             shortcut: "email_intent",
+          },
+        };
+      }
+
+      if (this.isYoutubeIntent(userInput)) {
+        const executedSteps = [];
+        const extractedQuery = this.extractYoutubeQuery(userInput) || "trending songs";
+        const plannedParams = this.prepareParameters(
+          "play_youtube",
+          { query: extractedQuery },
+          userInput,
+          memoryContext,
+          responseStyle,
+          history,
+        );
+
+        const execution = await this.executeSingleStep("play_youtube", plannedParams, 1, executedSteps);
+
+        return {
+          action: "play_youtube",
+          result: execution.message,
+          metadata: {
+            duration: Date.now() - startTime,
+            style: responseStyle,
+            parameters: plannedParams,
+            executedSteps,
+            autonomousMode: false,
+            planner: "shortcut",
+            shortcut: "youtube_intent",
           },
         };
       }
