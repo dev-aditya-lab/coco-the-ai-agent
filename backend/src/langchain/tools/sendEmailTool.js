@@ -1,5 +1,5 @@
 import { BaseTool } from "./baseTool.js";
-import { sendMail } from "../../services/mail/ResendMail.service.js";
+import { buildStyledEmailHtml, sendMail } from "../../services/mail/ResendMail.service.js";
 import { retainMemory } from "../services/hindsightService.js";
 
 export class SendEmailTool extends BaseTool {
@@ -53,10 +53,15 @@ export class SendEmailTool extends BaseTool {
     }
 
     try {
+      const html = buildStyledEmailHtml({
+        subject,
+        body,
+      });
+
       const sendResult = await sendMail({
         to,
         subject,
-        html: `<div><p>${body.replace(/\n/g, "<br/>")}</p></div>`,
+        html,
       });
 
       await retainMemory(`Email sent to ${to}. Subject: ${subject}.`, {

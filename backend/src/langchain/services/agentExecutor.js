@@ -5,7 +5,7 @@
 
 import { getToolRegistry } from "../toolRegistry.js";
 import { env } from "../../config/env.js";
-import { getGroqActionPlan, getGroqAutonomousStep } from "./groqService.js";
+import { getGroqActionPlan, getGroqAutonomousStep, getGroqEmailDraft } from "./groqService.js";
 
 class AgentExecutor {
   constructor(options = {}) {
@@ -93,7 +93,7 @@ class AgentExecutor {
     return hasEmailVerb && hasRecipient;
   }
 
-  extractEmailParams(command) {
+  async extractEmailParams(command, responseStyle = "english") {
     const text = typeof command === "string" ? command.trim() : "";
     const toMatch = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
     const to = toMatch ? toMatch[0] : "";
@@ -101,15 +101,64 @@ class AgentExecutor {
     const subjectMatch =
       text.match(/\bsubject\s*(?:is|:)?\s*["']?([^"'\n]+)["']?/i)
       || text.match(/\bwith\s+(.+?)\s+subject\b/i);
-    const subject = subjectMatch && subjectMatch[1] ? subjectMatch[1].trim() : "COCO update";
 
-    const bodyMatch = text.match(/\babout\s+(.+?)(?:\s+with\s+.+\s+subject\b|\s+subject\s*(?:is|:)|$)/i);
-    const bodyTopic = bodyMatch && bodyMatch[1] ? bodyMatch[1].trim() : "your requested update";
+    const topicMatch =
+      text.match(/\babout\s+(.+?)(?:\s+with\s+.+\s+subject\b|\s+subject\s*(?:is|:)|$)/i)
+      || text.match(/\bregarding\s+(.+?)(?:\s+with\s+.+\s+subject\b|\s+subject\s*(?:is|:)|$)/i)
+      || text.match(/\bon\s+(.+?)(?:\s+with\s+.+\s+subject\b|\s+subject\s*(?:is|:)|$)/i);
+
+    const rawTopic = topicMatch && topicMatch[1] ? topicMatch[1].trim() : "your requested update";
+    const topic = rawTopic.replace(/[.\s]+$/, "") || "your requested update";
+    const titleTopic = topic
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+
+    const subject = subjectMatch && subjectMatch[1]
+      ? subjectMatch[1].trim()
+      : `Update on ${titleTopic}`;
+
+    let body = "";
+    let finalSubject = subject;
+
+    try {
+      const draft = await getGroqEmailDraft({
+        command: text,
+        topic,
+        to,
+        preferredSubject: subjectMatch && subjectMatch[1] ? subject : "",
+        responseStyle,
+      });
+
+      if (draft?.subject && (!subjectMatch || !subjectMatch[1])) {
+        finalSubject = String(draft.subject).trim();
+      }
+
+      if (draft?.body) {
+        body = String(draft.body).trim();
+      }
+    } catch (error) {
+      this.log(`Email draft generation fallback used: ${error?.message || "unknown error"}`);
+    }
+
+    if (!body) {
+      body = [
+        "Hello,",
+        "",
+        `I am sharing a quick update regarding ${topic}.`,
+        "",
+        "Please let me know if you would like a detailed summary or specific next steps.",
+        "",
+        "Best regards,",
+        "COCO",
+      ].join("\n");
+    }
 
     return {
       to,
-      subject,
-      body: `Hi,\n\nSharing an update about ${bodyTopic}.\n\nRegards,\nCOCO`,
+      subject: finalSubject,
+      body,
       mode: "send",
     };
   }
@@ -278,7 +327,7 @@ class AgentExecutor {
         const executedSteps = [];
         const plannedParams = this.prepareParameters(
           "send_email",
-          this.extractEmailParams(userInput),
+          await this.extractEmailParams(userInput, responseStyle),
           userInput,
           memoryContext,
           responseStyle,

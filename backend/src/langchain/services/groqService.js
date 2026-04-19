@@ -150,6 +150,64 @@ export async function getGroqInfoResponse(query, styleInstruction = "") {
 }
 
 /**
+ * Generate professional email subject/body from a user command
+ * @param {Object} input - {command, topic, to, preferredSubject, responseStyle}
+ * @returns {Promise<{subject: string, body: string}>}
+ */
+export async function getGroqEmailDraft(input = {}) {
+  const {
+    command = "",
+    topic = "",
+    to = "",
+    preferredSubject = "",
+    responseStyle = "english",
+  } = input;
+
+  const groq = getGroqInstance({
+    temperature: 0.2,
+    maxTokens: 700,
+  });
+
+  const systemPrompt = `You write polished professional emails.
+Return ONLY valid JSON with keys: subject, body.
+Do not include markdown, explanations, or extra keys.
+
+Rules:
+- Subject must be specific, concise, and business-appropriate.
+- Body must read like a real email (not a chatbot response).
+- Keep tone professional and clear.
+- Include greeting and closing.
+- Body formatting must use plain text with paragraph breaks using blank lines (\\n\\n between paragraphs).
+- Avoid filler phrases and avoid mentioning AI or assistant identity.
+- If details are limited, write a neutral, practical email that still sounds complete.
+- Language preference: use professional English for style=english; for style=bilingual, keep it business-professional with light Hinglish only if natural.`;
+
+  const userPrompt = JSON.stringify({
+    task: "Draft email content",
+    recipient: to,
+    userCommand: command,
+    topicHint: topic,
+    preferredSubject,
+    responseStyle,
+  });
+
+  const response = await groq.invoke([
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userPrompt },
+  ]);
+
+  const parsed = parseModelJson(response.content);
+  const subject = typeof parsed?.subject === "string" ? parsed.subject.trim() : "";
+  const body = typeof parsed?.body === "string" ? parsed.body.trim() : "";
+
+  if (!subject || !body) {
+    throw new Error("Invalid email draft from model");
+  }
+
+  return { subject, body };
+}
+
+/**
  * Get action planning response from Groq
  * @param {string} command - User command
  * @param {Array} history - Conversation history
@@ -193,6 +251,10 @@ Rules:
 - Each action must be one of allowed actions.
 - Put concrete tool input in parameters.
 - Email requests MUST use send_email (not get_info/chat), include to, subject, body, and mode='send' unless user explicitly asks for a draft.
+- For send_email content quality:
+  subject must be specific and professional (avoid vague lines like "COCO update").
+  body must be business-ready with greeting, concise context, and clear closing.
+  keep tone neutral and professional; avoid slang/casual wording.
 - Do not return extra keys.`;
 
     const messages = [
