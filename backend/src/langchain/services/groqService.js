@@ -15,7 +15,7 @@ let groqInstance = null;
  */
 export function getGroqInstance(options = {}) {
   if (!groqInstance) {
-    const apiKey = env.GROQ_API_KEY;
+    const apiKey = env.groqApiKey;
 
     if (!apiKey) {
       throw new Error("GROQ_API_KEY is not set in environment variables");
@@ -23,7 +23,7 @@ export function getGroqInstance(options = {}) {
 
     groqInstance = new ChatGroq({
       apiKey,
-      modelName: options.modelName || "mixtral-8x7b-32768",
+      model: options.model || options.modelName || "llama-3.3-70b-versatile",
       temperature: options.temperature !== undefined ? options.temperature : 0.7,
       maxTokens: options.maxTokens || 1024,
     });

@@ -3,6 +3,7 @@ import { env } from "../../config/env.js";
 
 let hindsightClient = null;
 let bankReady = false;
+let retainSuspendedUntil = 0;
 
 function normalizeString(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -132,6 +133,10 @@ export async function retainMemory(content, options = {}) {
     return null;
   }
 
+  if (retainSuspendedUntil > Date.now()) {
+    return null;
+  }
+
   const bankId = await ensureMemoryBank();
   if (!bankId) {
     return null;
@@ -144,10 +149,19 @@ export async function retainMemory(content, options = {}) {
       metadata: normalizeMetadata(options.metadata),
       documentId: options.documentId,
       tags: options.tags,
-      async: options.async ?? false,
+      async: options.async ?? true,
     });
   } catch (error) {
-    console.warn("[hindsight] retain_failed", error?.message || error);
+    const message = String(error?.message || error || "");
+
+    if (message.toLowerCase().includes("out of shared memory") || message.toLowerCase().includes("max_locks_per_transaction")) {
+      // Prevent noisy repeated failures if the upstream Hindsight instance is temporarily saturated.
+      retainSuspendedUntil = Date.now() + 5 * 60 * 1000;
+      console.warn("[hindsight] retain temporarily suspended for 5 minutes due to server lock pressure");
+    } else {
+      console.warn("[hindsight] retain_failed", message);
+    }
+
     return null;
   }
 }

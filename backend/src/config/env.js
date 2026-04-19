@@ -1,6 +1,12 @@
 import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const envFilePath = path.resolve(__dirname, "../../.env");
+
+dotenv.config({ path: envFilePath });
 
 export const env = {
   port: Number(process.env.PORT || 4000),
@@ -10,7 +16,7 @@ export const env = {
   hindsightApiKey: process.env.HINDSIGHT_API_KEY || "",
   hindsightApiEndpoint: process.env.HINDSIGHT_API_ENDPOINTS || process.env.HINDSIGHT_API_URL || "",
   hindsightApiUrl: process.env.HINDSIGHT_API_URL || process.env.HINDSIGHT_API_ENDPOINTS || "",
-  hindsightBankId: process.env.HINDSIGHT_BANK_ID || "coco-agent",
+  hindsightBankId: process.env.HINDSIGHT_BANK_ID || "coco",
   tavilyApiKey: process.env.TAVILY_API_KEY || "",
   qwenModel: process.env.QWEN_MODEL || "qwen/qwen3-32b",
   gptModel: process.env.GPT_MODEL || "openai/gpt-oss-120b",
