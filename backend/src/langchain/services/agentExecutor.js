@@ -41,7 +41,7 @@ class AgentExecutor {
    * @param {Array} history - Conversation history
    * @returns {Promise<Object>} - {action, result, metadata}
    */
-  async execute(userInput, history = []) {
+  async execute(userInput, history = [], memoryContext = "") {
     const startTime = Date.now();
     this.log(`Executing: "${userInput}"`);
 
@@ -55,7 +55,7 @@ class AgentExecutor {
       this.log(`Detected style: ${responseStyle}`);
 
       // Get action plan from LLM
-      const actionPlan = await getGroqActionPlan(userInput, history);
+      const actionPlan = await getGroqActionPlan(userInput, history, memoryContext);
       this.log(`Action plan: ${JSON.stringify(actionPlan)}`);
 
       const action = actionPlan.action || "chat";
@@ -71,6 +71,14 @@ class AgentExecutor {
 
       if (action === "get_user_info" && !parameters.type) {
         parameters.type = "name";
+      }
+
+      if (action === "research_web" && !parameters.query) {
+        parameters.query = userInput;
+      }
+
+      if (memoryContext) {
+        parameters.memory_context = memoryContext;
       }
 
       // Add response style to parameters
