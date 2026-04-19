@@ -10,7 +10,7 @@ dotenv.config({ path: envFilePath });
 
 export const env = {
   port: Number(process.env.PORT || 4000),
-  corsOrigin: process.env.CORS_ORIGIN || "http://localhost:3001",
+  corsOrigin: process.env.CORS_ORIGIN || "http://localhost:3000",
   mongodbUri: process.env.MONGODB_URI || "",
   groqApiKey: process.env.GROQ_API_KEY || "",
   hindsightApiKey: process.env.HINDSIGHT_API_KEY || "",
@@ -26,6 +26,10 @@ export const env = {
   openclawEnabled: (process.env.OPENCLAW_ENABLED || "true").toLowerCase() === "true",
   openclawExecutable: process.env.OPENCLAW_EXECUTABLE || "",
   openclawTimeoutMs: Math.max(3000, Number(process.env.OPENCLAW_TIMEOUT_MS || 45000)),
+  openclawModel: process.env.OPENCLAW_MODEL || "groq/llama-3.1-8b-instant",
+  openclawMaxHistoryEntries: Math.max(0, Number(process.env.OPENCLAW_MAX_HISTORY_ENTRIES || 4)),
+  openclawMaxMemoryChars: Math.max(0, Number(process.env.OPENCLAW_MAX_MEMORY_CHARS || 1200)),
+  openclawMaxStepMessageChars: Math.max(0, Number(process.env.OPENCLAW_MAX_STEP_MESSAGE_CHARS || 120)),
   agentAutonomousMode: (process.env.AGENT_AUTONOMOUS_MODE || "true").toLowerCase() === "true",
   agentAutonomousMaxIterations: Math.max(1, Number(process.env.AGENT_AUTONOMOUS_MAX_ITERATIONS || 4)),
 };
