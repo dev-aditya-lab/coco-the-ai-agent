@@ -1,11 +1,16 @@
 import { env } from "../config/env.js";
 
+const allowedOrigins = env.corsOrigin
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
+
 function isAllowedOrigin(origin) {
   if (!origin) {
     return true;
   }
 
-  return env.corsOrigin.split(",").map((value) => value.trim()).includes(origin);
+  return allowedOrigins.includes(origin);
 }
 
 export function corsMiddleware(req, res, next) {

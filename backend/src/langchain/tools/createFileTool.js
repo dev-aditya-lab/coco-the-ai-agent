@@ -4,6 +4,7 @@
  */
 
 import { BaseTool } from "./baseTool.js";
+import { env } from "../../config/env.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -26,7 +27,9 @@ const ALLOWED_FILE_EXTENSIONS = new Set([
   ".xml",
 ]);
 
-const DEFAULT_FILE_DIR = process.env.COCO_FILES_DIR || path.join(process.cwd(), "coco_files");
+const DEFAULT_FILE_DIR = path.isAbsolute(env.cocoFilesDir)
+  ? env.cocoFilesDir
+  : path.join(process.cwd(), env.cocoFilesDir);
 
 export class CreateFileTool extends BaseTool {
   constructor() {

@@ -10,9 +10,10 @@ dotenv.config({ path: envFilePath });
 
 export const env = {
   port: Number(process.env.PORT || 4000),
-  corsOrigin: process.env.CORS_ORIGIN || "http://localhost:3000",
+  corsOrigin: process.env.CORS_ORIGIN || "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:4000,http://localhost:4001,http://localhost:4003,http://localhost:5000,http://localhost:5001,http://localhost:5002",
   mongodbUri: process.env.MONGODB_URI || "",
   groqApiKey: process.env.GROQ_API_KEY || "",
+  resendApiKey: process.env.RESEND_API_KEY || "",
   hindsightApiKey: process.env.HINDSIGHT_API_KEY || "",
   hindsightApiEndpoint: process.env.HINDSIGHT_API_ENDPOINTS || process.env.HINDSIGHT_API_URL || "",
   hindsightApiUrl: process.env.HINDSIGHT_API_URL || process.env.HINDSIGHT_API_ENDPOINTS || "",
@@ -32,4 +33,9 @@ export const env = {
   openclawMaxStepMessageChars: Math.max(0, Number(process.env.OPENCLAW_MAX_STEP_MESSAGE_CHARS || 120)),
   agentAutonomousMode: (process.env.AGENT_AUTONOMOUS_MODE || "true").toLowerCase() === "true",
   agentAutonomousMaxIterations: Math.max(1, Number(process.env.AGENT_AUTONOMOUS_MAX_ITERATIONS || 4)),
+  cocoFilesDir: process.env.COCO_FILES_DIR || "coco_files",
+  cocoUserName: process.env.COCO_USER_NAME || "Friend",
+  cocoUserEmail: process.env.COCO_USER_EMAIL || "email@example.com",
+  cocoUserPhone: process.env.COCO_USER_PHONE || "Not set",
+  resendMail: (process.env.RESEND_MAIL || "").trim(),
 };
