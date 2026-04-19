@@ -8,6 +8,19 @@ import { getGroqInfoResponse } from "../services/groqService.js";
 import { searchWeb, summarizeResearchResults } from "../services/tavilyService.js";
 import { retainMemory } from "../services/hindsightService.js";
 
+const ALLOWED_TOPICS = new Set(["general", "news", "finance"]);
+const ALLOWED_SEARCH_DEPTHS = new Set(["basic", "advanced"]);
+
+function normalizeTopic(value) {
+  const topic = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return ALLOWED_TOPICS.has(topic) ? topic : "general";
+}
+
+function normalizeSearchDepth(value) {
+  const depth = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return ALLOWED_SEARCH_DEPTHS.has(depth) ? depth : "basic";
+}
+
 export class ResearchWebTool extends BaseTool {
   constructor() {
     super(
@@ -76,10 +89,13 @@ export class ResearchWebTool extends BaseTool {
     }
 
     try {
+      const normalizedTopic = normalizeTopic(input.topic);
+      const normalizedDepth = normalizeSearchDepth(input.search_depth);
+
       const searchResponse = await searchWeb(query, {
-        topic: input.topic || "general",
+        topic: normalizedTopic,
         maxResults: input.max_results || 5,
-        searchDepth: input.search_depth || "basic",
+        searchDepth: normalizedDepth,
         includeAnswer: input.include_answer ?? true,
         includeRawContent: input.include_raw_content ?? false,
         includeDomains: input.include_domains || [],
@@ -104,7 +120,8 @@ export class ResearchWebTool extends BaseTool {
         context: "web-research",
         metadata: {
           query,
-          topic: input.topic || "general",
+          topic: normalizedTopic,
+          search_depth: normalizedDepth,
           source: "tavily",
         },
         tags: ["research", "web"],

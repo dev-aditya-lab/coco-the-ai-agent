@@ -1,5 +1,5 @@
-import AssistantConsole from "@/components/assistant-console";
+import AssistantApp from "@/components/assistant/AssistantApp";
 
 export default function Home() {
-  return <AssistantConsole />;
+  return <AssistantApp />;
 }

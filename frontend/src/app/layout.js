@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 
 export const metadata = {
   title: "Coco Assistant",
-  description: "A minimal AI assistant shell built with Next.js and Express.",
+  description: "Professional command and conversation workspace for COCO AI Agent.",
 };
 
 export default function RootLayout({ children }) {
@@ -22,7 +22,7 @@ export default function RootLayout({ children }) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-[#050505] text-zinc-100">
+      <body className="min-h-full">
         {children}
       </body>
     </html>

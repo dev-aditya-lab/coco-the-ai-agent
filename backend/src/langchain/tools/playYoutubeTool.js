@@ -52,14 +52,29 @@ export class PlayYoutubeTool extends BaseTool {
     try {
       const url = this.buildYouTubeSearchUrl(query);
 
-      // Open YouTube search in default browser
-      const openCommand = process.platform === "win32"
-        ? `start "${url}"`
-        : process.platform === "darwin"
-          ? `open "${url}"`
-          : `xdg-open "${url}"`;
-
-      execAsync(openCommand, { detached: true });
+      if (process.platform === "win32") {
+        try {
+          await execAsync(`cmd /c start "" chrome "${url}"`);
+        } catch {
+          await execAsync(`cmd /c start "" "${url}"`);
+        }
+      } else if (process.platform === "darwin") {
+        try {
+          await execAsync(`open -a "Google Chrome" "${url}"`);
+        } catch {
+          await execAsync(`open "${url}"`);
+        }
+      } else {
+        try {
+          await execAsync(`google-chrome "${url}"`);
+        } catch {
+          try {
+            await execAsync(`chromium-browser "${url}"`);
+          } catch {
+            await execAsync(`xdg-open "${url}"`);
+          }
+        }
+      }
 
       return this.formatByStyle(
         style,

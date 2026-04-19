@@ -4,6 +4,7 @@ export const APP_REGISTRY = {
   figma: "start figma",
   spotify: "start spotify",
   word: "start winword",
+  calculator: "calc.exe",
 };
 
 export const APP_ALIASES = {
@@ -14,4 +15,7 @@ export const APP_ALIASES = {
   "google chrome": "chrome",
   "ms word": "word",
   "microsoft word": "word",
+  calc: "calculator",
+  "windows calculator": "calculator",
+  "calculator app": "calculator",
 };

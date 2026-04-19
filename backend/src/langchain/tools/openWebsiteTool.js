@@ -140,14 +140,32 @@ export class OpenWebsiteTool extends BaseTool {
     }
 
     try {
-      // Use platform-specific command to open URL
-      const openCommand = process.platform === "win32"
-        ? `start "${url}"`
-        : process.platform === "darwin"
-          ? `open "${url}"`
-          : `xdg-open "${url}"`;
-
-      execAsync(openCommand, { detached: true });
+      if (process.platform === "win32") {
+        // Prefer Chrome on Windows, then fallback to the default browser.
+        try {
+          await execAsync(`cmd /c start "" chrome "${url}"`);
+        } catch {
+          await execAsync(`cmd /c start "" "${url}"`);
+        }
+      } else if (process.platform === "darwin") {
+        // Prefer Google Chrome on macOS, fallback to default browser.
+        try {
+          await execAsync(`open -a "Google Chrome" "${url}"`);
+        } catch {
+          await execAsync(`open "${url}"`);
+        }
+      } else {
+        // Linux: try common Chrome binaries first, then xdg-open.
+        try {
+          await execAsync(`google-chrome "${url}"`);
+        } catch {
+          try {
+            await execAsync(`chromium-browser "${url}"`);
+          } catch {
+            await execAsync(`xdg-open "${url}"`);
+          }
+        }
+      }
 
       return this.formatByStyle(
         style,

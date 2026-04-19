@@ -4,6 +4,7 @@ import { env } from "../../config/env.js";
 let hindsightClient = null;
 let bankReady = false;
 let retainSuspendedUntil = 0;
+let recallSuspendedUntil = 0;
 
 function normalizeString(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -92,6 +93,10 @@ export async function recallMemory(query, options = {}) {
     return null;
   }
 
+  if (recallSuspendedUntil > Date.now()) {
+    return null;
+  }
+
   const bankId = await ensureMemoryBank();
   if (!bankId) {
     return null;
@@ -111,7 +116,16 @@ export async function recallMemory(query, options = {}) {
       tags: options.tags,
     });
   } catch (error) {
-    console.warn("[hindsight] recall_failed", error?.message || error);
+    const message = String(error?.message || error || "");
+
+    if (message.toLowerCase().includes("out of shared memory") || message.toLowerCase().includes("max_locks_per_transaction")) {
+      // Avoid repeated recall pressure when Hindsight backend is lock-saturated.
+      recallSuspendedUntil = Date.now() + 5 * 60 * 1000;
+      console.warn("[hindsight] recall temporarily suspended for 5 minutes due to server lock pressure");
+    } else {
+      console.warn("[hindsight] recall_failed", message);
+    }
+
     return null;
   }
 }

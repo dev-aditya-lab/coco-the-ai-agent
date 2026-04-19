@@ -7,6 +7,8 @@ import { tavily } from "@tavily/core";
 import { env } from "../../config/env.js";
 
 let tavilyClient = null;
+const ALLOWED_TOPICS = new Set(["general", "news", "finance"]);
+const ALLOWED_SEARCH_DEPTHS = new Set(["basic", "advanced"]);
 
 function normalizeList(value) {
   if (Array.isArray(value)) {
@@ -23,6 +25,16 @@ function normalizeList(value) {
   return [];
 }
 
+function normalizeTopic(value) {
+  const topic = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return ALLOWED_TOPICS.has(topic) ? topic : "general";
+}
+
+function normalizeSearchDepth(value) {
+  const depth = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return ALLOWED_SEARCH_DEPTHS.has(depth) ? depth : "basic";
+}
+
 export function getTavilyClient() {
   if (!tavilyClient) {
     if (!env.tavilyApiKey) {
@@ -37,13 +49,13 @@ export function getTavilyClient() {
 
 export async function searchWeb(query, options = {}) {
   const client = getTavilyClient();
-  const searchDepth = options.searchDepth || "basic";
+  const searchDepth = normalizeSearchDepth(options.searchDepth);
   const maxResults = Number.isFinite(Number(options.maxResults)) ? Number(options.maxResults) : 5;
 
   const response = await client.search(query, {
     searchDepth,
     maxResults: Math.min(Math.max(maxResults, 1), 10),
-    topic: options.topic || "general",
+    topic: normalizeTopic(options.topic),
     includeAnswer: options.includeAnswer ?? true,
     includeRawContent: options.includeRawContent ?? false,
     includeFavicon: options.includeFavicon ?? true,
