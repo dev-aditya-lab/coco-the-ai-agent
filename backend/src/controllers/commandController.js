@@ -1,35 +1,15 @@
-import { routeActionPlan } from "../services/modelRouter.js";
-import { executeAction } from "../services/actionHandler.js";
+import { getAgentExecutor } from "../langchain/index.js";
 import { env } from "../config/env.js";
 import { getRecentCommands, saveCommandHistory } from "../services/historyService.js";
 
-const ALLOWED_ACTIONS = new Set(["open_app", "open_website", "play_youtube", "create_file", "get_info", "get_user_info", "chat"]);
 const MAX_CONVERSATION_MESSAGES = 10;
 const conversationState = {
   name: "",
   history: [],
 };
 
-const HINGLISH_HINT_REGEX = /[\u0900-\u097f]|\b(kya|kaise|kyu|kyon|mera|meri|mujhe|tum|tumhara|aap|aapka|hai|haan|nahi|kar|karo|batao|samjhao|main|mein|abhi|thoda|namaste|haanji|theek|thik)\b/i;
-
 function normalizeString(value) {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function detectResponseStyle(command) {
-  const normalized = normalizeString(command);
-  if (!normalized) {
-    return "english";
-  }
-
-  return HINGLISH_HINT_REGEX.test(normalized) ? "bilingual" : "english";
-}
-
-function formatByStyle(style, hinglish, english) {
-  if (style === "bilingual") {
-    return hinglish;
-  }
-  return english;
 }
 
 function appendConversationHistory(role, content) {
@@ -90,333 +70,22 @@ function isNameLookupIntent(text) {
   ) && !/\bmy\s+name\s+is\b|\bmera\s+naam\s+[a-z][a-z\s'-]{0,30}\s+hai\b/.test(normalized);
 }
 
-function isGreetingMessage(text) {
-  const normalized = normalizeString(text).toLowerCase();
-  return /\b(hi|hello|hey|namaste|yo)\b/.test(normalized);
-}
-
-function isIntroMessage(text) {
-  const normalized = normalizeString(text).toLowerCase();
-  return /\b(i am|i'm|my name is)\b/.test(normalized);
-}
-
-function personalizeChatResponse(command, response, responseStyle = "english") {
-  const safeResponse = normalizeString(response);
-
-  if (isGreetingMessage(command) && !isIntroMessage(command) && conversationState.name) {
-    return formatByStyle(
-      responseStyle,
-      `Welcome back ${conversationState.name}, kaise help karu?`,
-      `Welcome back ${conversationState.name}. How can I help?`
-    );
-  }
-
-  return safeResponse || buildConversationResponse(command, responseStyle);
-}
-
-function buildConversationResponse(command, responseStyle = "english") {
-  const normalized = normalizeString(command).toLowerCase();
-  const extractedName = extractNameFromText(command);
-
-  if (/\bwho are you\b/.test(normalized)) {
-    return formatByStyle(
-      responseStyle,
-      "Main COCO hoon, ek AI assistant jo Aditya Gupta ne banaya hai. Main tasks perform kar sakta hoon aur questions ka answer de sakta hoon.",
-      "I am COCO, an AI assistant created by Aditya Gupta. I can perform tasks and answer questions."
-    );
-  }
-
-  if (extractedName) {
-    conversationState.name = extractedName;
-    return formatByStyle(
-      responseStyle,
-      `Hi ${extractedName}, nice to meet you. Kaise help karu?`,
-      `Hi ${extractedName}, nice to meet you. How can I help?`
-    );
-  }
-
-  if (/\bhow are you\b/.test(normalized)) {
-    return formatByStyle(
-      responseStyle,
-      "Main ready hoon help karne ke liye.",
-      "I am ready to help you."
-    );
-  }
-
-  if (/\b(what are you doing|what you doing|what're you doing)\b/.test(normalized)) {
-    return formatByStyle(
-      responseStyle,
-      "Main yaha tasks aur questions me help karne ke liye hoon.",
-      "I am here to help with tasks and questions."
-    );
-  }
-
-  if (/\b(hi|hello|hey|namaste|yo)\b/.test(normalized)) {
-    if (conversationState.name) {
-      return formatByStyle(
-        responseStyle,
-        `Hello ${conversationState.name}, kaise help kar sakta hoon?`,
-        `Hello ${conversationState.name}, how can I help?`
-      );
-    }
-
-    return formatByStyle(
-      responseStyle,
-      "Hello, kaise help kar sakta hoon?",
-      "Hello, how can I help?"
-    );
-  }
-
-  return formatByStyle(
-    responseStyle,
-    "Thoda clear karo, samajh nahi aaya.",
-    "Please clarify your request; I did not fully understand it."
-  );
-}
-
-function buildFallback(command, reason = "fallback", responseStyle = "english") {
-  return {
-    action: "chat",
-    parameters: {
-      response: buildConversationResponse(command, responseStyle),
-      _response_style: responseStyle,
-    },
-    meta: {
-      source: "fallback",
-      reason,
-    },
-  };
-}
-
-function parseActionJson(rawText) {
+async function logCommandToHistory(command, action, parameters, response, status) {
   try {
-    return JSON.parse(rawText);
-  } catch {
-    const jsonCandidate = rawText.match(/\{[\s\S]*\}/)?.[0];
-    if (!jsonCandidate) {
-      throw new Error("No JSON object found in model output.");
-    }
-    return JSON.parse(jsonCandidate);
-  }
-}
-
-function normalizeParameters(parameters) {
-  if (!parameters || typeof parameters !== "object" || Array.isArray(parameters)) {
-    return {};
-  }
-
-  const normalized = {};
-
-  for (const [key, value] of Object.entries(parameters)) {
-    if (!key || typeof key !== "string") {
-      continue;
-    }
-
-    if (typeof value === "string") {
-      normalized[key] = value.trim();
-      continue;
-    }
-
-    if (typeof value === "number" || typeof value === "boolean") {
-      normalized[key] = String(value);
-      continue;
-    }
-
-    normalized[key] = "";
-  }
-
-  return normalized;
-}
-
-function normalizeStep(stepPayload, originalCommand, source = "groq", responseStyle = "english") {
-  if (!stepPayload || typeof stepPayload !== "object") {
-    return buildFallback(originalCommand, "invalid_step", responseStyle);
-  }
-
-  const safeAction = normalizeString(stepPayload.action);
-  const action = ALLOWED_ACTIONS.has(safeAction) ? safeAction : "chat";
-
-  const parameters = normalizeParameters(stepPayload.parameters);
-
-  if (action === "chat") {
-    const topLevelResponse = normalizeString(stepPayload.response);
-    parameters.response = personalizeChatResponse(
-      originalCommand,
-      parameters.response || topLevelResponse,
-      responseStyle
-    );
-  }
-
-  if (action === "get_info" && !parameters.query) {
-    parameters.query = normalizeString(originalCommand);
-  }
-
-  if (action === "get_user_info" && !parameters.type) {
-    parameters.type = "name";
-  }
-
-  parameters._response_style = responseStyle;
-
-  return {
-    action,
-    parameters,
-    meta: {
-      source,
-    },
-  };
-}
-
-function validateActionPayload(payload, originalCommand, responseStyle = "english") {
-  if (!payload || typeof payload !== "object") {
-    return [buildFallback(originalCommand, "invalid_payload", responseStyle)];
-  }
-
-  if (Array.isArray(payload.steps) && payload.steps.length > 0) {
-    return payload.steps.map((step) => normalizeStep(step, originalCommand, "groq", responseStyle));
-  }
-
-  if (payload.action) {
-    return [normalizeStep(payload, originalCommand, "groq_single_step", responseStyle)];
-  }
-
-  return [buildFallback(originalCommand, "missing_steps", responseStyle)];
-}
-
-function toHistoryRecord(command, actionPlan, execution) {
-  return {
-    command,
-    action: actionPlan.action,
-    parameters: actionPlan.parameters,
-    response: typeof execution?.message === "string" ? execution.message : "",
-    status: execution?.status === "failed" ? "failure" : "success",
-  };
-}
-
-function inferYoutubeQueryFromCommand(command) {
-  const normalized = normalizeString(command).toLowerCase();
-  if (!normalized) {
-    return "";
-  }
-
-  const cleaned = normalized
-    .replace(/[.,!?]/g, " ")
-    .replace(/\b(coco|jarvis|please|plz|khol|khlo|kholna|khol do|open|chalao|play|na|main|mein|me|in|on|youtube|chrome|browser)\b/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return cleaned;
-}
-
-async function executeSteps(actionSteps, command, responseStyle = "english") {
-  const stepsExecuted = [];
-  let activeApp = "";
-
-  for (let index = 0; index < actionSteps.length; index += 1) {
-    const step = actionSteps[index];
-    const preparedStep = {
-      ...step,
-      parameters: {
-        ...(step.parameters || {}),
-        _response_style: responseStyle,
-      },
-    };
-
-    if (preparedStep.action === "play_youtube") {
-      const hasQuery = normalizeString(
-        preparedStep.parameters.query
-          || preparedStep.parameters.search
-          || preparedStep.parameters.song
-          || preparedStep.parameters.video
-          || preparedStep.parameters.topic
-      );
-
-      if (!hasQuery) {
-        const inferredQuery = inferYoutubeQueryFromCommand(command);
-        if (inferredQuery) {
-          preparedStep.parameters.query = inferredQuery;
-        }
-      }
-
-      if (!normalizeString(preparedStep.parameters.browser) && activeApp) {
-        preparedStep.parameters.browser = activeApp;
-      }
-    }
-
-    console.info("[command] step_execute_start", {
-      stepNumber: index + 1,
-      action: preparedStep.action,
-      parameters: preparedStep.parameters,
+    await saveCommandHistory({
+      command,
+      action,
+      parameters,
+      response,
+      status,
     });
-
-    const execution = await executeAction(preparedStep);
-
-    const stepResult = {
-      stepNumber: index + 1,
-      action: preparedStep.action,
-      parameters: preparedStep.parameters,
-      status: execution.status,
-      message: execution.message,
-      details: execution.details,
-    };
-
-    stepsExecuted.push(stepResult);
-
-    if (preparedStep.action === "open_app" && execution.status === "completed") {
-      activeApp = normalizeString(
-        execution?.details?.app_name || preparedStep.parameters.app_name || preparedStep.parameters.app
-      ).toLowerCase();
-    }
-
-    saveCommandHistory(toHistoryRecord(command, preparedStep, execution)).catch((error) => {
-      console.error("[history] save_failed", error);
-    });
-
-    console.info("[command] step_execute_done", stepResult);
-
-    if (env.actionStopOnFailure && execution.status === "failed") {
-      break;
-    }
+  } catch (error) {
+    console.error("[history] save_failed", error);
   }
-
-  return stepsExecuted;
-}
-
-function buildFinalMessage(stepsExecuted, responseStyle = "english") {
-  const failedStep = stepsExecuted.find((step) => step.status === "failed");
-
-  if (failedStep) {
-    return `Execution stopped at step ${failedStep.stepNumber}: ${failedStep.message}`;
-  }
-
-  if (stepsExecuted.length === 1 && stepsExecuted[0]?.action === "get_info") {
-    return stepsExecuted[0].message || "Completed informational response.";
-  }
-
-  if (stepsExecuted.length === 1 && stepsExecuted[0]?.action === "chat") {
-    return stepsExecuted[0].message || formatByStyle(responseStyle, "Hello, kaise help kar sakta hoon?", "Hello, how can I help?");
-  }
-
-  if (stepsExecuted.length === 1) {
-    return stepsExecuted[0].message || formatByStyle(responseStyle, "Kaam ho gaya.", "Task completed.");
-  }
-
-  return formatByStyle(responseStyle, "Kaam complete ho gaya.", "Task completed successfully.");
-}
-
-function buildModePayload(stepsExecuted) {
-  if (stepsExecuted.length === 1 && stepsExecuted[0]?.action === "chat") {
-    return {
-      action: "chat",
-      response: stepsExecuted[0].message || "Hello, kaise help kar sakta hoon?",
-    };
-  }
-
-  return null;
 }
 
 export async function postCommand(req, res) {
   const command = normalizeString(req.body?.command);
-  const responseStyle = detectResponseStyle(command);
 
   if (!command) {
     return res.status(400).json({
@@ -433,60 +102,70 @@ export async function postCommand(req, res) {
   }
 
   try {
-    let actionSteps;
+    const executor = getAgentExecutor({
+      verbose: env.DEBUG === "true",
+    });
 
-    if (isNameLookupIntent(command)) {
-      actionSteps = [
-        {
-          action: "get_user_info",
-          parameters: {
-            type: "name",
-            name: conversationState.name,
-            _response_style: responseStyle,
-          },
-          meta: {
-            source: "rule_name_lookup",
-          },
-        },
-      ];
-    } else {
-      const rawResponse = await routeActionPlan(command, conversationState.history);
-      console.info("[command] ai_response", { rawResponse });
+    const result = await executor.execute(command, conversationState.history);
 
-      const parsedJson = parseActionJson(rawResponse);
-      console.info("[command] parsed_json", parsedJson);
+    const parameters = {
+      ...(result.metadata?.parameters || {}),
+      name: conversationState.name || result.metadata?.parameters?.name || "",
+    };
 
-      actionSteps = validateActionPayload(parsedJson, command, responseStyle);
-    }
+    const stepsExecuted = [
+      {
+        stepNumber: 1,
+        action: result.action,
+        parameters,
+        status: result.action === "error" ? "failed" : "completed",
+        message: result.result,
+        details: result.metadata,
+      },
+    ];
 
-    const stepsExecuted = await executeSteps(actionSteps, command, responseStyle);
-    const finalMessage = buildFinalMessage(stepsExecuted, responseStyle);
+    const finalMessage = result.result;
 
     appendConversationHistory("user", command);
     appendConversationHistory("assistant", finalMessage);
 
+    await logCommandToHistory(
+      command,
+      result.action,
+      parameters,
+      finalMessage,
+      result.action === "error" ? "failure" : "success"
+    );
+
     return res.status(200).json({
-      success: stepsExecuted.every((step) => step.status !== "failed"),
+      success: result.action !== "error",
       stepsExecuted,
       finalMessage,
-      modePayload: buildModePayload(stepsExecuted),
+      modePayload: result.action === "chat" ? { action: "chat", response: finalMessage } : null,
       timestamp: new Date().toISOString(),
+      metadata: result.metadata,
     });
   } catch (error) {
     console.error("[command] processing_error", error);
 
-    const fallbackSteps = [buildFallback(command, "parse_or_provider_error", responseStyle)];
-    const stepsExecuted = await executeSteps(fallbackSteps, command, responseStyle);
-    const finalMessage = buildFinalMessage(stepsExecuted, responseStyle);
+    const errorMessage = env.DEBUG === "true" ? error.message : "An error occurred processing your command.";
 
     appendConversationHistory("user", command);
-    appendConversationHistory("assistant", finalMessage);
+    appendConversationHistory("assistant", errorMessage);
+
+    await logCommandToHistory(command, "error", {}, errorMessage, "failure");
 
     return res.status(200).json({
-      success: stepsExecuted.every((step) => step.status !== "failed"),
-      stepsExecuted,
-      finalMessage,
-      modePayload: buildModePayload(stepsExecuted),
+      success: false,
+      stepsExecuted: [
+        {
+          stepNumber: 1,
+          action: "error",
+          status: "failed",
+          message: errorMessage,
+        },
+      ],
+      finalMessage: errorMessage,
       timestamp: new Date().toISOString(),
     });
   }

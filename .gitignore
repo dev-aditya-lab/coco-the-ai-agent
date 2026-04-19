@@ -43,3 +43,6 @@ next-env.d.ts
 *md
 !README.md
 generated
+
+.vscode
+mpc.json
