@@ -31,6 +31,15 @@ const DEFAULT_FILE_DIR = path.isAbsolute(env.cocoFilesDir)
   ? env.cocoFilesDir
   : path.join(process.cwd(), env.cocoFilesDir);
 
+function previewContent(content, maxChars = 500) {
+  const text = typeof content === "string" ? content : "";
+  if (!text) {
+    return "";
+  }
+
+  return text.length > maxChars ? `${text.slice(0, maxChars)}...` : text;
+}
+
 export class CreateFileTool extends BaseTool {
   constructor() {
     super(
@@ -114,11 +123,21 @@ export class CreateFileTool extends BaseTool {
       // Write file
       await writeFile(resolvedPath, content, "utf-8");
 
-      return this.formatByStyle(
+      const message = this.formatByStyle(
         style,
         `${filename} create ho gaya.`,
         `File ${filename} created successfully.`
       );
+
+      return {
+        message,
+        type: "file",
+        filename,
+        path: resolvedPath,
+        contentPreview: previewContent(content),
+        contentLength: content.length,
+        lineCount: content ? content.split(/\r?\n/).length : 0,
+      };
     } catch (error) {
       console.error("[create-file-tool] Error:", error.message);
       return this.formatByStyle(

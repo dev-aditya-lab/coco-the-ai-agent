@@ -4,7 +4,7 @@
  */
 
 import { BaseTool } from "./baseTool.js";
-import { getOpenClawTextResponse } from "../services/openclawService.js";
+import { getGroqChatResponse } from "../services/groqService.js";
 
 export class ChatTool extends BaseTool {
   constructor() {
@@ -58,11 +58,12 @@ export class ChatTool extends BaseTool {
         : "",
     ].filter(Boolean).join("\n\n");
 
-    const response = await getOpenClawTextResponse({
-      systemPrompt: "You are COCO, a conversational assistant.",
+    const response = await getGroqChatResponse(
+      `${contextBlock}\n\nUser message:\n${message}`,
+      history,
       styleInstruction,
-      userPrompt: `${contextBlock}\n\nUser message:\n${message}`,
-    });
+      memoryContext,
+    );
     return response;
   }
 }

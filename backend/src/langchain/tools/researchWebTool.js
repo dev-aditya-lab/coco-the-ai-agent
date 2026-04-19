@@ -4,7 +4,7 @@
  */
 
 import { BaseTool } from "./baseTool.js";
-import { getOpenClawTextResponse } from "../services/openclawService.js";
+import { getGroqChatResponse } from "../services/groqService.js";
 import { searchWeb, summarizeResearchResults } from "../services/tavilyService.js";
 import { retainMemory } from "../services/hindsightService.js";
 
@@ -98,6 +98,8 @@ export class ResearchWebTool extends BaseTool {
         searchDepth: normalizedDepth,
         includeAnswer: input.include_answer ?? true,
         includeRawContent: input.include_raw_content ?? false,
+        includeImages: true,
+        includeImageDescriptions: true,
         includeDomains: input.include_domains || [],
         excludeDomains: input.exclude_domains || [],
       });
@@ -114,11 +116,7 @@ export class ResearchWebTool extends BaseTool {
         ? "If the source summary is in Hindi or the user asked in Hinglish, answer once in natural mixed Hinglish. Do not provide a separate English translation."
         : "Answer only in English.";
 
-      const finalResponse = await getOpenClawTextResponse({
-        systemPrompt: "You are COCO, a web research assistant that cites and summarizes reliably.",
-        styleInstruction,
-        userPrompt: synthesisPrompt,
-      });
+      const finalResponse = await getGroqChatResponse(synthesisPrompt, [], styleInstruction, "");
 
       await retainMemory(`Research query: ${query}\n\nAnswer:\n${finalResponse}\n\nResearch notes:\n${researchSummary}`, {
         context: "web-research",
@@ -131,7 +129,45 @@ export class ResearchWebTool extends BaseTool {
         tags: ["research", "web"],
       });
 
-      return finalResponse;
+      const sources = Array.isArray(searchResponse?.results)
+        ? searchResponse.results.slice(0, 6).map((item, index) => ({
+            rank: index + 1,
+            title: typeof item?.title === "string" ? item.title : `Source ${index + 1}`,
+            url: typeof item?.url === "string" ? item.url : "",
+            snippet: typeof item?.content === "string" ? item.content.slice(0, 260) : "",
+          }))
+        : [];
+
+      const images = Array.isArray(searchResponse?.images)
+        ? searchResponse.images.slice(0, 4).map((image, index) => {
+            if (typeof image === "string") {
+              return {
+                id: index + 1,
+                url: image,
+                alt: "Reference image",
+                source: "",
+              };
+            }
+
+            return {
+              id: index + 1,
+              url: typeof image?.url === "string" ? image.url : "",
+              alt: typeof image?.description === "string" ? image.description : "Reference image",
+              source: typeof image?.source === "string" ? image.source : "",
+            };
+          }).filter((item) => item.url)
+        : [];
+
+      return {
+        message: finalResponse,
+        type: "research",
+        query,
+        topic: normalizedTopic,
+        searchDepth: normalizedDepth,
+        answer: typeof searchResponse?.answer === "string" ? searchResponse.answer : "",
+        sources,
+        images,
+      };
     } catch (error) {
       console.error("[research-web-tool] Error:", error.message);
       return this.formatByStyle(

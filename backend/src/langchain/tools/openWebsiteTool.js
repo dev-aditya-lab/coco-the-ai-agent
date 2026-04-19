@@ -167,11 +167,18 @@ export class OpenWebsiteTool extends BaseTool {
         }
       }
 
-      return this.formatByStyle(
+      const message = this.formatByStyle(
         style,
         `${urlInput} khul gaya.`,
         `Opening ${urlInput}.`
       );
+
+      return {
+        message,
+        type: "website",
+        input: urlInput,
+        url,
+      };
     } catch (error) {
       console.error("[open-website-tool] Error:", error.message);
       return this.formatByStyle(

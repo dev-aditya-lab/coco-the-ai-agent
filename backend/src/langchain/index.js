@@ -25,10 +25,12 @@ export { toolRegistry, getToolRegistry } from "./toolRegistry.js";
 // Services
 
 export {
-  getOpenClawActionPlan,
-  getOpenClawAutonomousStep,
-  getOpenClawTextResponse,
-} from "./services/openclawService.js";
+  getGroqChatResponse,
+  getGroqInfoResponse,
+  getGroqActionPlan,
+  getGroqAutonomousStep,
+  getGroqStreamingResponse,
+} from "./services/groqService.js";
 
 export {
   getTavilyClient,

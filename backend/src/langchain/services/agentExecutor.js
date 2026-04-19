@@ -5,13 +5,13 @@
 
 import { getToolRegistry } from "../toolRegistry.js";
 import { env } from "../../config/env.js";
-import { getOpenClawActionPlan, getOpenClawAutonomousStep } from "./openclawService.js";
+import { getGroqActionPlan, getGroqAutonomousStep } from "./groqService.js";
 
 class AgentExecutor {
   constructor(options = {}) {
     this.registry = getToolRegistry();
     this.maxIterations = options.maxIterations || 8;
-    this.openClawEnabled = options.openClawEnabled ?? env.openclawEnabled;
+    this.plannerEnabled = options.plannerEnabled ?? true;
     this.autonomousEnabled = options.autonomousEnabled ?? env.agentAutonomousMode;
     this.maxAutonomousIterations = options.maxAutonomousIterations || env.agentAutonomousMaxIterations || 4;
     this.verbose = options.verbose || false;
@@ -35,6 +35,51 @@ class AgentExecutor {
   detectResponseStyle(command) {
     const HINGLISH_HINT_REGEX = /[\u0900-\u097f]|\b(kya|kaise|kyu|kyon|mera|meri|mujhe|tum|tumhara|aap|aapka|hai|haan|nahi|kar|karo|batao|samjhao|main|mein|abhi|thoda|namaste|haanji|theek|thik)\b/i;
     return HINGLISH_HINT_REGEX.test(command) ? "bilingual" : "english";
+  }
+
+  isGreetingIntent(command) {
+    const normalized = typeof command === "string" ? command.trim().toLowerCase() : "";
+    if (!normalized) {
+      return false;
+    }
+
+    if (/^(hi|hii|hello|hey|yo|hola|namaste)(\s+coco)?[!,.\s]*$/.test(normalized)) {
+      return true;
+    }
+
+    const actionKeyword = /\b(open|play|create|get|send|track|summarize|research|search|write|delete|remove|schedule)\b/;
+    const namedGreeting = /^(hi|hii|hello|hey)\s+[a-z][a-z0-9_-]{1,20}[!,.?\s]*$/;
+
+    return namedGreeting.test(normalized) && !actionKeyword.test(normalized);
+  }
+
+  buildGreetingResponse(responseStyle) {
+    return responseStyle === "bilingual"
+      ? "Hi! Main COCO hoon. Batao kya karna hai?"
+      : "Hi! I'm COCO. What can I help you with?";
+  }
+
+  isSmallTalkIntent(command) {
+    const normalized = typeof command === "string" ? command.trim().toLowerCase() : "";
+    if (!normalized) {
+      return false;
+    }
+
+    return [
+      /\bhow are you\b/,
+      /\bhow are you today\b/,
+      /\bwhat'?s up\b/,
+      /\bhow is it going\b/,
+      /\bare you there\b/,
+      /\bgood morning\b/,
+      /\bgood evening\b/,
+    ].some((pattern) => pattern.test(normalized));
+  }
+
+  buildSmallTalkResponse(responseStyle) {
+    return responseStyle === "bilingual"
+      ? "Main achha hoon, thanks! Main ready hoon, bolo kya help chahiye."
+      : "I'm doing great, thanks! I'm ready to help with whatever you need.";
   }
 
   normalizePlan(actionPlan) {
@@ -174,12 +219,28 @@ class AgentExecutor {
     this.log(`Executing: "${userInput}"`);
 
     try {
-      if (!this.openClawEnabled) {
-        throw new Error("OpenClaw is disabled. Set OPENCLAW_ENABLED=true.");
-      }
-
       const responseStyle = this.detectResponseStyle(userInput);
       this.log(`Detected style: ${responseStyle}`);
+
+      if (this.isGreetingIntent(userInput) || this.isSmallTalkIntent(userInput)) {
+        return {
+          action: "chat",
+          result: this.isGreetingIntent(userInput)
+            ? this.buildGreetingResponse(responseStyle)
+            : this.buildSmallTalkResponse(responseStyle),
+          metadata: {
+            duration: Date.now() - startTime,
+            style: responseStyle,
+            parameters: {
+              message: userInput,
+            },
+            executedSteps: [],
+            autonomousMode: false,
+            planner: "shortcut",
+            shortcut: this.isGreetingIntent(userInput) ? "greeting" : "smalltalk",
+          },
+        };
+      }
 
       if (this.autonomousEnabled) {
         const executedSteps = [];
@@ -188,7 +249,7 @@ class AgentExecutor {
         let lastParameters = {};
 
         for (let iteration = 0; iteration < this.maxAutonomousIterations; iteration += 1) {
-          const stepPlan = await getOpenClawAutonomousStep({
+          const stepPlan = await getGroqAutonomousStep({
             goal: userInput,
             history,
             memoryContext,
@@ -209,7 +270,7 @@ class AgentExecutor {
                 parameters: lastParameters,
                 executedSteps,
                 autonomousMode: true,
-                planner: "openclaw",
+                planner: "groq",
               },
             };
           }
@@ -241,7 +302,7 @@ class AgentExecutor {
                 parameters: lastParameters,
                 executedSteps,
                 autonomousMode: true,
-                planner: "openclaw",
+                planner: "groq",
                 error: "Tool not found",
               },
             };
@@ -257,13 +318,13 @@ class AgentExecutor {
             parameters: lastParameters,
             executedSteps,
             autonomousMode: true,
-            planner: "openclaw",
+            planner: "groq",
             maxIterationsReached: true,
           },
         };
       }
 
-      const actionPlan = await getOpenClawActionPlan(userInput, history, memoryContext);
+      const actionPlan = await getGroqActionPlan(userInput, history, memoryContext);
       this.log(`Action plan: ${JSON.stringify(actionPlan)}`);
       const planSteps = this.normalizePlan(actionPlan);
       const executedSteps = [];
@@ -294,19 +355,19 @@ class AgentExecutor {
           style: responseStyle,
           parameters: lastParameters,
           executedSteps,
-          planner: "openclaw",
+          planner: "groq",
         },
       };
     } catch (error) {
       console.error("[agent-executor] Error:", error.message);
 
       return {
-        action: "error",
-        result: `Sorry, something went wrong in orchestration: ${error.message}`,
+        action: "chat",
+        result: "I hit a temporary planning issue, but I'm here. Please try again.",
         metadata: {
           duration: Date.now() - startTime,
           error: error.message,
-          planner: "openclaw",
+          planner: "fallback",
         },
       };
     }

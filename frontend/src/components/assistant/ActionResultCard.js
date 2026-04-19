@@ -28,6 +28,63 @@ function extractUrls(text) {
   return Array.from(new Set(matches));
 }
 
+function tryEvaluateExpression(query) {
+  const source = cleanText(query).toLowerCase();
+  const expression = source
+    .replace(/^(calculate|calc|solve|what is|find)\s*/i, "")
+    .replace(/[=?]/g, "")
+    .trim();
+
+  if (!expression || !/^[0-9+\-*/().\s]+$/.test(expression)) {
+    return null;
+  }
+
+  try {
+    const value = Function(`"use strict"; return (${expression});`)();
+    if (!Number.isFinite(Number(value))) {
+      return null;
+    }
+    return {
+      expression,
+      result: Number(value),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function tryUnitConversion(query) {
+  const source = cleanText(query).toLowerCase();
+  const match = source.match(/(\d+(?:\.\d+)?)\s*(km|m|cm|mm|kg|g|lb|lbs|c|f)\s*(?:to|in)\s*(km|m|cm|mm|kg|g|lb|lbs|c|f)/i);
+  if (!match) {
+    return null;
+  }
+
+  const value = Number(match[1]);
+  const from = match[2].toLowerCase();
+  const to = match[3].toLowerCase();
+
+  const massFactors = { kg: 1, g: 1000, lb: 2.2046226218, lbs: 2.2046226218 };
+  const lengthFactors = { km: 0.001, m: 1, cm: 100, mm: 1000 };
+
+  if (from in massFactors && to in massFactors) {
+    const kgValue = value / massFactors[from];
+    return { from, to, value, result: kgValue * massFactors[to] };
+  }
+
+  if (from in lengthFactors && to in lengthFactors) {
+    const meterValue = value / lengthFactors[from];
+    return { from, to, value, result: meterValue * lengthFactors[to] };
+  }
+
+  if ((from === "c" || from === "f") && (to === "c" || to === "f")) {
+    const result = from === "c" ? ((value * 9) / 5) + 32 : ((value - 32) * 5) / 9;
+    return { from, to, value, result };
+  }
+
+  return null;
+}
+
 function OpenWebsiteCard({ step }) {
   const url = cleanText(step.parameters?.url || step.details?.url);
   return (
@@ -60,6 +117,7 @@ function OpenAppCard({ step }) {
 }
 
 function CreateFileCard({ step }) {
+  const preview = cleanText(step.details?.contentPreview);
   return (
     <div className="mt-2 rounded-md border border-slate-700 bg-slate-950/60 p-2">
       <div className="mb-1 inline-flex items-center gap-1 text-xs text-slate-200">
@@ -68,6 +126,13 @@ function CreateFileCard({ step }) {
       </div>
       <LabelRow label="Filename" value={step.details?.filename || step.parameters?.filename} />
       <LabelRow label="Path" value={step.details?.path || step.parameters?.path} />
+      <LabelRow label="Lines" value={String(step.details?.lineCount || "")} />
+      {preview ? (
+        <div className="mt-2 rounded-md border border-slate-700/70 bg-slate-900/90 p-2">
+          <p className="m-0 mb-1 text-[11px] text-slate-400">Content preview</p>
+          <pre className="m-0 max-h-40 overflow-auto whitespace-pre-wrap text-[11px] text-slate-200">{preview}</pre>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -86,7 +151,11 @@ function YoutubeCard({ step }) {
 }
 
 function ResearchCard({ step }) {
-  const links = extractUrls(step.message);
+  const links = Array.isArray(step.details?.sources)
+    ? step.details.sources.map((source) => source.url).filter(Boolean)
+    : extractUrls(step.message);
+  const sources = Array.isArray(step.details?.sources) ? step.details.sources : [];
+  const images = Array.isArray(step.details?.images) ? step.details.images : [];
 
   return (
     <div className="mt-2 rounded-md border border-slate-700 bg-slate-950/60 p-2">
@@ -96,13 +165,34 @@ function ResearchCard({ step }) {
       </div>
       <LabelRow label="Topic" value={step.parameters?.query || step.parameters?.topic} />
       <LabelRow label="Depth" value={step.parameters?.search_depth || step.parameters?.depth} />
-      {links.length > 0 ? (
+      {sources.length > 0 ? (
+        <div className="mt-1 grid gap-1">
+          <p className="m-0 text-[11px] text-slate-400">Sources:</p>
+          {sources.slice(0, 5).map((source, index) => (
+            <a key={`${source.url}-${index}`} className="inline-flex items-center gap-1 text-[11px] text-blue-300 hover:text-blue-200" href={source.url} target="_blank" rel="noreferrer">
+              <ExternalLink size={12} />
+              <span className="truncate">{source.title || source.url}</span>
+            </a>
+          ))}
+        </div>
+      ) : null}
+      {links.length > 0 && sources.length === 0 ? (
         <div className="mt-1 grid gap-1">
           <p className="m-0 text-[11px] text-slate-400">Sources:</p>
           {links.slice(0, 5).map((link) => (
             <a key={link} className="inline-flex items-center gap-1 text-[11px] text-blue-300 hover:text-blue-200" href={link} target="_blank" rel="noreferrer">
               <ExternalLink size={12} />
               <span className="truncate">{link}</span>
+            </a>
+          ))}
+        </div>
+      ) : null}
+      {images.length > 0 ? (
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          {images.slice(0, 4).map((image, index) => (
+            <a key={`${image.url}-${index}`} href={image.url} target="_blank" rel="noreferrer" className="group overflow-hidden rounded-md border border-slate-700 bg-slate-900/80">
+              <img src={image.url} alt={image.alt || "Research image"} className="h-24 w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+              <p className="m-0 truncate px-2 py-1 text-[10px] text-slate-300">{image.alt || "Reference image"}</p>
             </a>
           ))}
         </div>
@@ -123,6 +213,8 @@ function InfoCard({ step }) {
         : lower.includes("stock") || lower.includes("price") || lower.includes("market")
           ? "Finance"
           : "Information";
+  const calculation = tryEvaluateExpression(query);
+  const conversion = tryUnitConversion(query);
 
   return (
     <div className="mt-2 rounded-md border border-slate-700 bg-slate-950/60 p-2">
@@ -132,6 +224,20 @@ function InfoCard({ step }) {
       </div>
       <LabelRow label="Query" value={query} />
       <LabelRow label="Summary" value={step.message} />
+      {calculation ? (
+        <div className="mt-2 rounded-md border border-emerald-700/40 bg-emerald-900/20 p-2">
+          <p className="m-0 text-[11px] text-emerald-200">Calculation</p>
+          <p className="m-0 text-[11px] text-slate-100">{calculation.expression} = {calculation.result}</p>
+        </div>
+      ) : null}
+      {conversion ? (
+        <div className="mt-2 rounded-md border border-cyan-700/40 bg-cyan-900/20 p-2">
+          <p className="m-0 text-[11px] text-cyan-100">Unit conversion</p>
+          <p className="m-0 text-[11px] text-slate-100">
+            {conversion.value} {conversion.from} = {Number(conversion.result.toFixed(4))} {conversion.to}
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -152,6 +258,8 @@ function EmailCard({ step }) {
 }
 
 function ReminderCard({ step }) {
+  const dueAt = step.details?.dueAt || step.parameters?.datetime;
+
   return (
     <div className="mt-2 rounded-md border border-slate-700 bg-slate-950/60 p-2">
       <div className="mb-1 inline-flex items-center gap-1 text-xs text-slate-200">
@@ -159,7 +267,8 @@ function ReminderCard({ step }) {
         <span>Reminder action</span>
       </div>
       <LabelRow label="Title" value={step.details?.title || step.parameters?.title} />
-      <LabelRow label="Due" value={step.details?.dueAt || step.parameters?.datetime} />
+      <LabelRow label="Due" value={dueAt} />
+      <LabelRow label="Status" value={dueAt ? "Scheduled" : "Pending time"} />
       <LabelRow label="Notes" value={step.details?.notes || step.parameters?.notes} />
     </div>
   );

@@ -169,13 +169,13 @@ export async function postCommand(req, res) {
       await retainMemory(`Execution trace for command: ${command}\n${JSON.stringify(compactTrace)}`, {
         context: "execution",
         metadata: {
-          planner: result.metadata?.planner || "openclaw",
+          planner: result.metadata?.planner || "groq",
           action: result.action,
           command,
         },
         tags: [
           "execution",
-          result.metadata?.planner || "openclaw",
+          result.metadata?.planner || "groq",
           stepsExecuted.some((step) => step.status === "failed") ? "had_failure" : "success",
         ],
       });

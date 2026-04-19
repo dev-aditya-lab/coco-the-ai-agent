@@ -1,5 +1,5 @@
 import { BaseTool } from "./baseTool.js";
-import { getOpenClawTextResponse } from "../services/openclawService.js";
+import { getGroqChatResponse } from "../services/groqService.js";
 
 export class SummarizeInboxTool extends BaseTool {
   constructor() {
@@ -35,11 +35,12 @@ export class SummarizeInboxTool extends BaseTool {
       ? "Respond once in natural Hinglish with priority labels and short action list."
       : "Respond in English with priority labels and short action list.";
 
-    const response = await getOpenClawTextResponse({
-      systemPrompt: "You summarize inbox messages and prioritize urgent actions.",
+    const response = await getGroqChatResponse(
+      `Inbox messages:\n${items.map((item, idx) => `${idx + 1}. ${item}`).join("\n")}`,
+      [],
       styleInstruction,
-      userPrompt: `Inbox messages:\n${items.map((item, idx) => `${idx + 1}. ${item}`).join("\n")}`,
-    });
+      "",
+    );
 
     return {
       message: response,

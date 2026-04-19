@@ -6,7 +6,7 @@
 import { ChatGroq } from "@langchain/groq";
 import { env } from "../../config/env.js";
 
-let groqInstance = null;
+const groqInstances = new Map();
 
 function parseModelJson(content) {
   const raw = typeof content === "string" ? content.trim() : "";
@@ -41,22 +41,30 @@ function parseModelJson(content) {
  * @returns {ChatGroq} - Groq LLM instance
  */
 export function getGroqInstance(options = {}) {
-  if (!groqInstance) {
-    const apiKey = env.groqApiKey;
+  const apiKey = env.groqApiKey;
 
-    if (!apiKey) {
-      throw new Error("GROQ_API_KEY is not set in environment variables");
-    }
-
-    groqInstance = new ChatGroq({
-      apiKey,
-      model: options.model || options.modelName || "llama-3.3-70b-versatile",
-      temperature: options.temperature !== undefined ? options.temperature : 0.7,
-      maxTokens: options.maxTokens || 1024,
-    });
+  if (!apiKey) {
+    throw new Error("GROQ_API_KEY is not set in environment variables");
   }
 
-  return groqInstance;
+  const model = options.model || options.modelName || "llama-3.3-70b-versatile";
+  const temperature = options.temperature !== undefined ? options.temperature : 0.7;
+  const maxTokens = options.maxTokens || 1024;
+  const cacheKey = JSON.stringify({ model, temperature, maxTokens });
+
+  if (!groqInstances.has(cacheKey)) {
+    groqInstances.set(
+      cacheKey,
+      new ChatGroq({
+        apiKey,
+        model,
+        temperature,
+        maxTokens,
+      }),
+    );
+  }
+
+  return groqInstances.get(cacheKey);
 }
 
 /**
@@ -155,10 +163,10 @@ export async function getGroqActionPlan(command, history = [], memoryContext = "
     });
 
     const systemPrompt = `You are an AI assistant that converts user commands into structured action plans.
-Return ONLY a valid JSON object, nothing else.
-Do not wrap in markdown or add any commentary.
+  Return ONLY a valid JSON object, nothing else.
+  Do not wrap in markdown or add any commentary.
 
-Allowed actions: chat, open_app, open_website, play_youtube, create_file, get_info, get_user_info, research_web
+  Allowed actions: chat, open_app, open_website, play_youtube, create_file, get_info, get_user_info, research_web, send_email, summarize_inbox, schedule_reminder, track_budget, track_habit
 
 Use research_web for internet research, current information, latest news, source-backed answers, or when the user explicitly asks to research something online.
 
@@ -225,7 +233,7 @@ Rules:
 }
 
 /**
- * Get one autonomous planning step (OpenCLAW-style loop)
+ * Get one autonomous planning step (LangChain-style loop)
  * @param {Object} input - Planner input
  * @returns {Promise<Object>} - {done, final_response, next_action}
  */
@@ -252,7 +260,7 @@ Return ONLY valid JSON with this exact shape:
   "done": true_or_false,
   "final_response": "string for the user when done, else empty string",
   "next_action": {
-    "action": "chat|open_app|open_website|play_youtube|create_file|get_info|get_user_info|research_web",
+    "action": "chat|open_app|open_website|play_youtube|create_file|get_info|get_user_info|research_web|send_email|summarize_inbox|schedule_reminder|track_budget|track_habit",
     "parameters": {}
   }
 }

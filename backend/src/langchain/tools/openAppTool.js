@@ -96,18 +96,28 @@ export class OpenAppTool extends BaseTool {
         || (typeof appCommand === "string" && appCommand.includes("Clear-RecycleBin"));
 
       if (wasEmptyAction) {
-        return this.formatByStyle(
+        return {
+          message: this.formatByStyle(
           style,
           "Recycle Bin saaf kar diya.",
           "Recycle Bin has been cleared."
-        );
+          ),
+          type: "open-app",
+          app: appLabel,
+          command: typeof appCommand === "string" ? appCommand : appCommand?.command || "",
+        };
       }
 
-      return this.formatByStyle(
+      return {
+        message: this.formatByStyle(
         style,
         `${appLabel} khul gaya.`,
         `Opening ${appLabel}.`
-      );
+        ),
+        type: "open-app",
+        app: appLabel,
+        command: typeof appCommand === "string" ? appCommand : appCommand?.command || "",
+      };
     } catch (error) {
       console.error("[open-app-tool] Error:", error.message);
       return this.formatByStyle(

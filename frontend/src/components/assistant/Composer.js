@@ -45,26 +45,25 @@ function chooseVoice(voices, language, gender) {
 export default function Composer({ loading, onSend, latestAssistantMessage = "", onStatusChange }) {
   const [value, setValue] = useState("");
   const [listening, setListening] = useState(false);
-  const [voiceSupported, setVoiceSupported] = useState(false);
+  const [voiceSupported] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    return Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+  });
   const [voiceError, setVoiceError] = useState("");
   const [voiceStatus, setVoiceStatus] = useState("Voice idle");
-  const [muted, setMuted] = useState(false);
+  const [muted, setMuted] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    return window.localStorage.getItem("coco-muted") === "1";
+  });
   const [speaking, setSpeaking] = useState(false);
   const [voiceSnippet, setVoiceSnippet] = useState("");
   const ttsVoiceRef = useRef(null);
   const lastSpokenMessageRef = useRef("");
   const recognitionRef = useRef(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const saved = window.localStorage.getItem("coco-muted");
-    if (saved === "1") {
-      setMuted(true);
-    }
-  }, []);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -79,11 +78,8 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "",
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      setVoiceSupported(false);
       return undefined;
     }
-
-    setVoiceSupported(true);
     const recognition = new SpeechRecognition();
     recognition.lang = "en-IN";
     recognition.continuous = false;

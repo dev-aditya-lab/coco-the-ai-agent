@@ -1,4 +1,4 @@
-import { Activity, Bot, CircleAlert, Wifi, WifiOff } from "lucide-react";
+import { Activity, Bot, CircleAlert, Sparkles, Wifi, WifiOff } from "lucide-react";
 import { getBackendUrl } from "@/services/assistant-api";
 
 function prettyStatus(status) {
@@ -23,21 +23,25 @@ export default function TopBar({ backendOnline, stats, profileName, agentStatus 
   const busy = agentStatus && agentStatus !== "idle";
 
   return (
-    <header className="rounded-xl border border-slate-700 bg-slate-900/90 p-4 shadow-lg">
+    <header className="relative overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900/85 p-4 shadow-[0_14px_42px_-22px_rgba(15,23,42,0.9)]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.12),transparent_40%),radial-gradient(circle_at_100%_100%,rgba(251,191,36,0.12),transparent_36%)]" />
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-blue-300">
+        <div className="relative flex items-center gap-3">
+          <div className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-cyan-700/60 bg-cyan-950/35 text-cyan-200">
             <Bot size={18} />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-slate-100">COCO Control Center</h1>
+            <h1 className="inline-flex items-center gap-2 text-lg font-semibold text-slate-100">
+              <span>COCO Control Center</span>
+              <Sparkles size={15} className="text-amber-200" />
+            </h1>
             <p className="text-sm text-slate-400">
               {profileName ? `Hi ${profileName}, command orchestration is ready.` : "Reliable command orchestration with full backend visibility"}
             </p>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="relative flex flex-wrap gap-2">
           <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs ${backendOnline ? "border-emerald-700 bg-emerald-900/40 text-emerald-100" : "border-red-700 bg-red-900/40 text-red-100"}`}>
             {backendOnline ? <Wifi size={14} /> : <WifiOff size={14} />}
             <span>{backendOnline ? "Backend Connected" : "Backend Disconnected"}</span>

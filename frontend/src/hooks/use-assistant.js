@@ -41,6 +41,13 @@ function buildGreeting(name) {
   return "COCO is ready. Ask anything in English or Hinglish.";
 }
 
+function isConnectivityError(message) {
+  const normalized = typeof message === "string" ? message.toLowerCase() : "";
+  return normalized.includes("unreachable")
+    || normalized.includes("failed to fetch")
+    || normalized.includes("network");
+}
+
 export function useAssistant() {
   const [profileName, setProfileName] = useState("");
   const [agentStatus, setAgentStatus] = useState("idle");
@@ -94,8 +101,9 @@ export function useAssistant() {
       const summary = await getTrackerSummary();
       setTrackerSummary(summary);
       setBackendOnline(true);
-    } catch {
-      setBackendOnline(false);
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : "";
+      setBackendOnline(!isConnectivityError(message));
     } finally {
       setLoadingTracker(false);
     }
@@ -168,7 +176,7 @@ export function useAssistant() {
     } catch (requestError) {
       const message = requestError instanceof Error ? requestError.message : "Unable to process command.";
       console.error("[assistant] command failed", { command: trimmed, error: requestError });
-      setBackendOnline(false);
+      setBackendOnline(!isConnectivityError(message));
       setError(message);
 
       setMessages((prev) => [
@@ -196,7 +204,7 @@ export function useAssistant() {
       const message = requestError instanceof Error ? requestError.message : "Unable to load history.";
       console.error("[assistant] history refresh failed", { error: requestError });
       setError(message);
-      setBackendOnline(false);
+      setBackendOnline(!isConnectivityError(message));
     } finally {
       setLoadingHistory(false);
     }

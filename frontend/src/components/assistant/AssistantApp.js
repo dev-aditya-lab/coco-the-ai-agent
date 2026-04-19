@@ -28,12 +28,12 @@ export default function AssistantApp() {
   } = useAssistant();
 
   return (
-    <main className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-6 md:px-6">
+    <main className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-5 md:px-6 md:py-7">
       <TopBar backendOnline={backendOnline} stats={stats} profileName={profileName} agentStatus={agentStatus} />
 
       {error ? <p className="rounded-lg border border-red-700 bg-red-950 px-3 py-2 text-sm text-red-100">{error}</p> : null}
 
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,2.1fr)_minmax(320px,1fr)]">
         <div className="grid gap-5">
           <Composer
             loading={loading}
@@ -41,7 +41,7 @@ export default function AssistantApp() {
             latestAssistantMessage={latestAssistantMessage}
             onStatusChange={setAgentStatus}
           />
-          <ConversationPanel messages={messages} loading={loading} />
+          <ConversationPanel messages={messages} loading={loading} agentStatus={agentStatus} />
         </div>
 
         <div className="grid gap-5">
