@@ -23,8 +23,14 @@ export {
   getGroqChatResponse,
   getGroqInfoResponse,
   getGroqActionPlan,
+  getGroqAutonomousStep,
   getGroqStreamingResponse,
 } from "./services/groqService.js";
+
+export {
+  getOpenClawActionPlan,
+  getOpenClawAutonomousStep,
+} from "./services/openclawService.js";
 
 export {
   getTavilyClient,

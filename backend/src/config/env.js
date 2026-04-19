@@ -23,4 +23,9 @@ export const env = {
   actionOutputDir: process.env.ACTION_OUTPUT_DIR || "generated",
   puppeteerHeadless: (process.env.PUPPETEER_HEADLESS || "false").toLowerCase() === "true",
   actionStopOnFailure: (process.env.ACTION_STOP_ON_FAILURE || "true").toLowerCase() === "true",
+  openclawEnabled: (process.env.OPENCLAW_ENABLED || "true").toLowerCase() === "true",
+  openclawExecutable: process.env.OPENCLAW_EXECUTABLE || "",
+  openclawTimeoutMs: Math.max(3000, Number(process.env.OPENCLAW_TIMEOUT_MS || 45000)),
+  agentAutonomousMode: (process.env.AGENT_AUTONOMOUS_MODE || "true").toLowerCase() === "true",
+  agentAutonomousMaxIterations: Math.max(1, Number(process.env.AGENT_AUTONOMOUS_MAX_ITERATIONS || 4)),
 };
