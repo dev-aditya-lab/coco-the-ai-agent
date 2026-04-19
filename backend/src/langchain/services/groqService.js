@@ -39,7 +39,7 @@ export function getGroqInstance(options = {}) {
  * @param {string} styleInstruction - Style instruction for response
  * @returns {Promise<string>} - LLM response
  */
-export async function getGroqChatResponse(message, history = [], styleInstruction = "") {
+export async function getGroqChatResponse(message, history = [], styleInstruction = "", memoryContext = "") {
   try {
     const groq = getGroqInstance();
 
@@ -51,6 +51,13 @@ export async function getGroqChatResponse(message, history = [], styleInstructio
       role: "system",
       content: `You are COCO, a helpful AI assistant. ${styleInstruction}`,
     });
+
+    if (memoryContext) {
+      messages.push({
+        role: "system",
+        content: `Relevant long-term memory context:\n${memoryContext}`,
+      });
+    }
 
     // Add conversation history
     if (Array.isArray(history) && history.length > 0) {
@@ -81,18 +88,21 @@ export async function getGroqChatResponse(message, history = [], styleInstructio
  * @param {string} query - Information query
  * @returns {Promise<string>} - LLM response
  */
-export async function getGroqInfoResponse(query) {
+export async function getGroqInfoResponse(query, styleInstruction = "") {
   try {
     const groq = getGroqInstance({
       temperature: 0.5,
       maxTokens: 512,
     });
 
+    const systemPrompt = styleInstruction
+      ? `You are a helpful AI assistant that provides accurate, concise information. Keep responses brief (1-2 lines). Be friendly and professional. ${styleInstruction}`
+      : "You are a helpful AI assistant that provides accurate, concise information. Keep responses brief (1-2 lines). Be friendly and professional.";
+
     const messages = [
       {
         role: "system",
-        content:
-          "You are a helpful AI assistant that provides accurate, concise information. Keep responses brief (1-2 lines). Be friendly and professional.",
+        content: systemPrompt,
       },
       {
         role: "user",
@@ -114,7 +124,7 @@ export async function getGroqInfoResponse(query) {
  * @param {Array} history - Conversation history
  * @returns {Promise<string>} - JSON action plan
  */
-export async function getGroqActionPlan(command, history = []) {
+export async function getGroqActionPlan(command, history = [], memoryContext = "") {
   try {
     const groq = getGroqInstance({
       temperature: 0.3,
@@ -125,7 +135,9 @@ export async function getGroqActionPlan(command, history = []) {
 Return ONLY a valid JSON object, nothing else.
 Do not wrap in markdown or add any commentary.
 
-Allowed actions: chat, open_app, open_website, play_youtube, create_file, get_info, get_user_info
+Allowed actions: chat, open_app, open_website, play_youtube, create_file, get_info, get_user_info, research_web
+
+Use research_web for internet research, current information, latest news, source-backed answers, or when the user explicitly asks to research something online.
 
 Response format:
 {
@@ -140,6 +152,15 @@ Response format:
         role: "system",
         content: systemPrompt,
       },
+      ...(memoryContext
+        ? [{ role: "system", content: `Relevant long-term memory context:\n${memoryContext}` }]
+        : []),
+      ...(Array.isArray(history)
+        ? history.slice(-6).map((entry) => ({
+            role: entry?.role === "assistant" ? "assistant" : "user",
+            content: typeof entry?.content === "string" ? entry.content : "",
+          }))
+        : []),
       {
         role: "user",
         content: command,
