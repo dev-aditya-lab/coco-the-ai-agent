@@ -1,29 +1,34 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { BarChart3, ChevronLeft, ChevronRight } from "lucide-react";
 import Composer from "@/components/assistant/Composer";
 import ConversationPanel from "@/components/assistant/ConversationPanel";
 import HistorySidebar from "@/components/assistant/HistorySidebar";
+import ProductivityPanel from "@/components/assistant/ProductivityPanel";
 import TopBar from "@/components/assistant/TopBar";
 import { useAssistant } from "@/hooks/use-assistant";
 
 export default function AssistantApp() {
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [productivityOpen, setProductivityOpen] = useState(false);
   const {
     profileName,
     messages,
     history,
     loading,
     loadingHistory,
+    loadingTracker,
     error,
     backendOnline,
     agentStatus,
+    trackerSummary,
     stats,
     latestAssistantMessage,
     setAgentStatus,
     sendCommand,
     refreshHistory,
+    refreshTrackerSummary,
   } = useAssistant();
 
   return (
@@ -59,6 +64,13 @@ export default function AssistantApp() {
             {historyOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
           </button>
 
+          <button
+            onClick={() => setProductivityOpen(!productivityOpen)}
+            className="absolute right-6 top-6 z-40 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-500 hover:text-slate-200 lg:hidden"
+          >
+            <BarChart3 size={18} />
+          </button>
+
           {/* Main Conversation Area */}
           <div className="min-w-0 flex-1 overflow-hidden pl-0 lg:pl-4">
             <div className="h-full w-full min-h-0">
@@ -72,6 +84,21 @@ export default function AssistantApp() {
               </ConversationPanel>
             </div>
           </div>
+
+          {/* Productivity Sidebar */}
+          <aside
+            className={`absolute inset-y-0 right-0 z-50 flex w-80 transform flex-col rounded-l-2xl border-l border-slate-700 bg-slate-900 transition-transform duration-300 ease-in-out lg:relative lg:z-auto lg:ml-4 lg:translate-x-0 lg:rounded-2xl lg:border lg:shadow-[0_16px_40px_-28px_rgba(15,23,42,0.9)] ${
+              productivityOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"
+            } shadow-lg`}
+          >
+            <div className="min-h-0 flex-1 overflow-auto p-2">
+              <ProductivityPanel
+                data={trackerSummary}
+                loading={loadingTracker}
+                onRefresh={refreshTrackerSummary}
+              />
+            </div>
+          </aside>
         </div>
       </section>
 

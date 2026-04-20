@@ -89,7 +89,11 @@ class AgentExecutor {
       return "";
     }
 
-    const withoutThink = text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+    const withoutThink = text
+      .replace(/<think[\s\S]*?<\/think>/gi, "")
+      .replace(/<think[\s\S]*$/gi, "")
+      .replace(/<\/?think>/gi, "")
+      .trim();
     if (!withoutThink) {
       return "";
     }
@@ -284,6 +288,61 @@ class AgentExecutor {
     const hasMediaNoun = /\b(song|songs|music|video|videos|track|playlist)\b/.test(normalized);
 
     return hasYoutubeWord || (hasMediaVerb && hasMediaNoun);
+  }
+
+  isReminderIntent(command) {
+    const normalized = typeof command === "string" ? command.trim().toLowerCase() : "";
+    if (!normalized) {
+      return false;
+    }
+
+    return /\b(remind|reminder|set reminder|set a reminder|schedule reminder|remember me)\b/.test(normalized);
+  }
+
+  extractReminderParams(command) {
+    const text = typeof command === "string" ? command.trim() : "";
+    const lower = text.toLowerCase();
+
+    const relativeMatch = lower.match(/\b(?:after|in)\s+(\d{1,4})\s*(second|seconds|sec|secs|s|minute|minutes|min|mins|m|hour|hours|hr|hrs|h)\b/);
+    const titleMatch = text.match(/\b(?:titled|title)\s+(.+)$/i);
+    const quotedTitleMatch = text.match(/"([^"]{2,80})"|“([^”]{2,80})”|'([^']{2,80})'/);
+
+    let dueAt = null;
+
+    if (relativeMatch) {
+      const amount = Number(relativeMatch[1]);
+      const unit = relativeMatch[2].toLowerCase();
+      if (Number.isFinite(amount) && amount > 0) {
+        let millis = amount * 1000;
+        if (/^m(in|ins|inute|inutes)?$/.test(unit)) {
+          millis = amount * 60 * 1000;
+        } else if (/^h(r|rs|our|ours)?$/.test(unit)) {
+          millis = amount * 60 * 60 * 1000;
+        }
+        dueAt = new Date(Date.now() + millis).toISOString();
+      }
+    }
+
+    const titleSource =
+      titleMatch?.[1]
+      || quotedTitleMatch?.[1]
+      || quotedTitleMatch?.[2]
+      || quotedTitleMatch?.[3]
+      || "Quick reminder";
+
+    const title = String(titleSource || "")
+      .trim()
+      .replace(/[.!\s]+$/, "");
+
+    if (!dueAt) {
+      const fallbackDate = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+      return { title: title || "Quick reminder", datetime: fallbackDate };
+    }
+
+    return {
+      title: title || "Quick reminder",
+      datetime: dueAt,
+    };
   }
 
   extractYoutubeQuery(command) {
@@ -706,6 +765,34 @@ class AgentExecutor {
             autonomousMode: false,
             planner: "shortcut",
             shortcut: "youtube_intent",
+          },
+        };
+      }
+
+      if (this.isReminderIntent(userInput)) {
+        const executedSteps = [];
+        const plannedParams = this.prepareParameters(
+          "schedule_reminder",
+          this.extractReminderParams(userInput),
+          userInput,
+          memoryContext,
+          responseStyle,
+          history,
+        );
+
+        const execution = await this.executeSingleStep("schedule_reminder", plannedParams, 1, executedSteps);
+
+        return {
+          action: "schedule_reminder",
+          result: execution.message,
+          metadata: {
+            duration: Date.now() - startTime,
+            style: responseStyle,
+            parameters: plannedParams,
+            executedSteps,
+            autonomousMode: false,
+            planner: "shortcut",
+            shortcut: "reminder_intent",
           },
         };
       }

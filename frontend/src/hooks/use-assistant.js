@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAssistantHistory, getTrackerSummary, sendAssistantCommand } from "@/services/assistant-api";
 
 function makeMessage({ role, content, timestamp, command, response }) {
@@ -48,6 +48,54 @@ function isConnectivityError(message) {
     || normalized.includes("network");
 }
 
+function buildOfflineFallbackReply(command, previousMessages = [], hardOffline = false) {
+  const text = typeof command === "string" ? command.trim() : "";
+  const normalized = text.toLowerCase();
+  const lastAssistant = [...previousMessages].reverse().find((item) => item?.role === "assistant")?.content || "";
+  const likelyCookingContext = /recipe|paneer|kadai|kadhai|cook|cooking|ingredient|food/i.test(`${text} ${lastAssistant}`);
+
+  const missingGarlic = (
+    /garlic|lahsun/i.test(normalized)
+    && /(don't have|dont have|no |without|nahi hai|nahin hai|nhi hai|missing)/i.test(normalized)
+  );
+
+  if (missingGarlic && likelyCookingContext) {
+    return [
+      "## No-Garlic Kadai Paneer",
+      "No problem. You can make tasty kadhai paneer without garlic.",
+      "### Quick adjustment",
+      "- Use extra ginger (about 1/2 tsp more).",
+      "- Add a pinch of asafoetida (hing) for aroma (optional).",
+      "- Slightly increase kasuri methi and garam masala at the end.",
+      "### Short steps",
+      "1. Heat oil/butter and saute onion, ginger, and green chili.",
+      "2. Add tomato puree, salt, turmeric, coriander powder, and red chili powder; cook till oil separates.",
+      "3. Add capsicum and cook 2 minutes.",
+      "4. Add paneer cubes with a little water or cream; simmer 3 to 4 minutes.",
+      "5. Finish with garam masala and crushed kasuri methi.",
+      "Serve hot with roti or naan.",
+      "",
+      hardOffline
+        ? "Backend is temporarily unavailable, so this is an offline quick reply."
+        : "There was a temporary request issue, so this is a quick local reply.",
+    ].join("\n");
+  }
+
+  if (hardOffline) {
+    return [
+      "Backend is temporarily unavailable, so I could not complete the full AI flow.",
+      "",
+      "Please try again in a moment. If you want, I can still give a quick manual answer based on your last message.",
+    ].join("\n");
+  }
+
+  return [
+    "I hit a temporary request issue while processing that.",
+    "",
+    "Please retry once. If it still fails, I will continue with a local quick answer.",
+  ].join("\n");
+}
+
 export function useAssistant() {
   const [profileName, setProfileName] = useState("");
   const [agentStatus, setAgentStatus] = useState("idle");
@@ -69,6 +117,7 @@ export function useAssistant() {
     budget: { income: 0, expense: 0, net: 0, recent: [] },
     habits: { done: 0, skipped: 0, recent: [] },
   });
+  const connectivityFailuresRef = useRef(0);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -100,10 +149,13 @@ export function useAssistant() {
     try {
       const summary = await getTrackerSummary();
       setTrackerSummary(summary);
+      connectivityFailuresRef.current = 0;
       setBackendOnline(true);
     } catch (requestError) {
       const message = requestError instanceof Error ? requestError.message : "";
-      setBackendOnline(!isConnectivityError(message));
+      const connectivityIssue = isConnectivityError(message);
+      connectivityFailuresRef.current = connectivityIssue ? connectivityFailuresRef.current + 1 : 0;
+      setBackendOnline(!(connectivityIssue && connectivityFailuresRef.current >= 2));
     } finally {
       setLoadingTracker(false);
     }
@@ -155,6 +207,7 @@ export function useAssistant() {
     try {
       const response = await sendAssistantCommand(trimmed);
       console.info("[assistant] command response", { command: trimmed, action: response?.metadata?.planner, success: response?.success });
+      connectivityFailuresRef.current = 0;
       setBackendOnline(true);
       setAgentStatus("executing");
 
@@ -176,18 +229,27 @@ export function useAssistant() {
     } catch (requestError) {
       const message = requestError instanceof Error ? requestError.message : "Unable to process command.";
       console.error("[assistant] command failed", { command: trimmed, error: requestError });
-      setBackendOnline(!isConnectivityError(message));
+      const connectivityIssue = isConnectivityError(message);
+      connectivityFailuresRef.current = connectivityIssue ? connectivityFailuresRef.current + 1 : 0;
+      const hardOffline = connectivityIssue && connectivityFailuresRef.current >= 2;
+      setBackendOnline(!hardOffline);
       setError(message);
 
-      setMessages((prev) => [
-        ...prev,
-        makeMessage({
-          role: "assistant",
-          content: "Request failed. Please check backend connection and try again.",
-          command: trimmed,
-          timestamp: new Date().toISOString(),
-        }),
-      ]);
+      setMessages((prev) => {
+        const fallbackContent = connectivityIssue
+          ? buildOfflineFallbackReply(trimmed, prev, hardOffline)
+          : "Request failed. Please try again.";
+
+        return [
+          ...prev,
+          makeMessage({
+            role: "assistant",
+            content: fallbackContent,
+            command: trimmed,
+            timestamp: new Date().toISOString(),
+          }),
+        ];
+      });
       setAgentStatus("idle");
     } finally {
       setLoading(false);
@@ -199,12 +261,15 @@ export function useAssistant() {
     try {
       const records = await getAssistantHistory(10);
       setHistory(records);
+      connectivityFailuresRef.current = 0;
       setBackendOnline(true);
     } catch (requestError) {
       const message = requestError instanceof Error ? requestError.message : "Unable to load history.";
       console.error("[assistant] history refresh failed", { error: requestError });
       setError(message);
-      setBackendOnline(!isConnectivityError(message));
+      const connectivityIssue = isConnectivityError(message);
+      connectivityFailuresRef.current = connectivityIssue ? connectivityFailuresRef.current + 1 : 0;
+      setBackendOnline(!(connectivityIssue && connectivityFailuresRef.current >= 2));
     } finally {
       setLoadingHistory(false);
     }

@@ -1,7 +1,52 @@
-import { ExternalLink, FileText, Globe, Info, PlayCircle, Search, SquareTerminal } from "lucide-react";
+import {
+  Bot,
+  ExternalLink,
+  FileText,
+  Globe,
+  Info,
+  Mail,
+  PlayCircle,
+  Search,
+  SquareTerminal,
+  User,
+} from "lucide-react";
 
 function cleanText(value) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function formatAmount(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) {
+    return "";
+  }
+  return amount.toFixed(2);
+}
+
+function safeDate(value) {
+  const source = cleanText(value);
+  if (!source) {
+    return "";
+  }
+
+  const parsed = new Date(source);
+  if (Number.isNaN(parsed.getTime())) {
+    return source;
+  }
+
+  return parsed.toLocaleString();
+}
+
+function CardShell({ icon, title, children }) {
+  return (
+    <div className="mt-2 rounded-md border border-slate-700 bg-slate-950/60 p-2">
+      <div className="mb-1 inline-flex items-center gap-1 text-xs text-slate-200">
+        {icon}
+        <span>{title}</span>
+      </div>
+      {children}
+    </div>
+  );
 }
 
 function LabelRow({ label, value }) {
@@ -88,11 +133,7 @@ function tryUnitConversion(query) {
 function OpenWebsiteCard({ step }) {
   const url = cleanText(step.parameters?.url || step.details?.url);
   return (
-    <div className="mt-2 rounded-md border border-slate-700 bg-slate-950/60 p-2">
-      <div className="mb-1 inline-flex items-center gap-1 text-xs text-slate-200">
-        <Globe size={13} />
-        <span>Website action</span>
-      </div>
+    <CardShell icon={<Globe size={13} />} title="Website action">
       <LabelRow label="Target" value={url} />
       {url ? (
         <a className="mt-1 inline-flex items-center gap-1 text-[11px] text-blue-300 hover:text-blue-200" href={url} target="_blank" rel="noreferrer">
@@ -100,30 +141,23 @@ function OpenWebsiteCard({ step }) {
           Open link
         </a>
       ) : null}
-    </div>
+    </CardShell>
   );
 }
 
 function OpenAppCard({ step }) {
   return (
-    <div className="mt-2 rounded-md border border-slate-700 bg-slate-950/60 p-2">
-      <div className="mb-1 inline-flex items-center gap-1 text-xs text-slate-200">
-        <SquareTerminal size={13} />
-        <span>System action</span>
-      </div>
+    <CardShell icon={<SquareTerminal size={13} />} title="System action">
       <LabelRow label="App" value={step.parameters?.app_name || step.parameters?.app} />
-    </div>
+      <LabelRow label="Command" value={step.details?.command} />
+    </CardShell>
   );
 }
 
 function CreateFileCard({ step }) {
   const preview = cleanText(step.details?.contentPreview);
   return (
-    <div className="mt-2 rounded-md border border-slate-700 bg-slate-950/60 p-2">
-      <div className="mb-1 inline-flex items-center gap-1 text-xs text-slate-200">
-        <FileText size={13} />
-        <span>File operation</span>
-      </div>
+    <CardShell icon={<FileText size={13} />} title="File operation">
       <LabelRow label="Filename" value={step.details?.filename || step.parameters?.filename} />
       <LabelRow label="Path" value={step.details?.path || step.parameters?.path} />
       <LabelRow label="Lines" value={String(step.details?.lineCount || "")} />
@@ -133,20 +167,16 @@ function CreateFileCard({ step }) {
           <pre className="m-0 max-h-40 overflow-auto whitespace-pre-wrap text-[11px] text-slate-200">{preview}</pre>
         </div>
       ) : null}
-    </div>
+    </CardShell>
   );
 }
 
 function YoutubeCard({ step }) {
   return (
-    <div className="mt-2 rounded-md border border-slate-700 bg-slate-950/60 p-2">
-      <div className="mb-1 inline-flex items-center gap-1 text-xs text-slate-200">
-        <PlayCircle size={13} />
-        <span>YouTube action</span>
-      </div>
+    <CardShell icon={<PlayCircle size={13} />} title="YouTube action">
       <LabelRow label="Query" value={step.parameters?.query || step.details?.query} />
       <LabelRow label="URL" value={step.details?.url} />
-    </div>
+    </CardShell>
   );
 }
 
@@ -158,11 +188,7 @@ function ResearchCard({ step }) {
   const images = Array.isArray(step.details?.images) ? step.details.images : [];
 
   return (
-    <div className="mt-2 rounded-md border border-slate-700 bg-slate-950/60 p-2">
-      <div className="mb-1 inline-flex items-center gap-1 text-xs text-slate-200">
-        <Search size={13} />
-        <span>Research action</span>
-      </div>
+    <CardShell icon={<Search size={13} />} title="Research action">
       <LabelRow label="Topic" value={step.parameters?.query || step.parameters?.topic} />
       <LabelRow label="Depth" value={step.parameters?.search_depth || step.parameters?.depth} />
       {sources.length > 0 ? (
@@ -197,7 +223,7 @@ function ResearchCard({ step }) {
           ))}
         </div>
       ) : null}
-    </div>
+    </CardShell>
   );
 }
 
@@ -217,11 +243,7 @@ function InfoCard({ step }) {
   const conversion = tryUnitConversion(query);
 
   return (
-    <div className="mt-2 rounded-md border border-slate-700 bg-slate-950/60 p-2">
-      <div className="mb-1 inline-flex items-center gap-1 text-xs text-slate-200">
-        <Info size={13} />
-        <span>{type} card</span>
-      </div>
+    <CardShell icon={<Info size={13} />} title={`${type} card`}>
       <LabelRow label="Query" value={query} />
       <LabelRow label="Summary" value={step.message} />
       {calculation ? (
@@ -238,22 +260,54 @@ function InfoCard({ step }) {
           </p>
         </div>
       ) : null}
-    </div>
+    </CardShell>
+  );
+}
+
+function ChatCard({ step }) {
+  return (
+    <CardShell icon={<Bot size={13} />} title="Conversation response">
+      <LabelRow label="Style" value={step.parameters?.style} />
+      <LabelRow label="Input" value={step.parameters?.message} />
+    </CardShell>
+  );
+}
+
+function UserInfoCard({ step }) {
+  let structured = null;
+  try {
+    const parsed = JSON.parse(cleanText(step.message));
+    if (parsed && typeof parsed === "object") {
+      structured = parsed;
+    }
+  } catch {
+    structured = null;
+  }
+
+  return (
+    <CardShell icon={<User size={13} />} title="User profile lookup">
+      <LabelRow label="Type" value={step.parameters?.type} />
+      {structured ? (
+        <>
+          <LabelRow label="Name" value={structured.name} />
+          <LabelRow label="Email" value={structured.email} />
+          <LabelRow label="Phone" value={structured.phone} />
+        </>
+      ) : (
+        <LabelRow label="Value" value={step.message} />
+      )}
+    </CardShell>
   );
 }
 
 function EmailCard({ step }) {
   const mode = cleanText(step.details?.mode || step.parameters?.mode || "draft");
   return (
-    <div className="mt-2 rounded-md border border-slate-700 bg-slate-950/60 p-2">
-      <div className="mb-1 inline-flex items-center gap-1 text-xs text-slate-200">
-        <Info size={13} />
-        <span>Email action</span>
-      </div>
+    <CardShell icon={<Mail size={13} />} title="Email action">
       <LabelRow label="Mode" value={mode} />
       <LabelRow label="To" value={step.details?.to || step.parameters?.to} />
       <LabelRow label="Subject" value={step.details?.subject || step.parameters?.subject} />
-    </div>
+    </CardShell>
   );
 }
 
@@ -261,56 +315,63 @@ function ReminderCard({ step }) {
   const dueAt = step.details?.dueAt || step.parameters?.datetime;
 
   return (
-    <div className="mt-2 rounded-md border border-slate-700 bg-slate-950/60 p-2">
-      <div className="mb-1 inline-flex items-center gap-1 text-xs text-slate-200">
-        <Info size={13} />
-        <span>Reminder action</span>
-      </div>
+    <CardShell icon={<Info size={13} />} title="Reminder action">
       <LabelRow label="Title" value={step.details?.title || step.parameters?.title} />
-      <LabelRow label="Due" value={dueAt} />
+      <LabelRow label="Due" value={safeDate(dueAt)} />
       <LabelRow label="Status" value={dueAt ? "Scheduled" : "Pending time"} />
       <LabelRow label="Notes" value={step.details?.notes || step.parameters?.notes} />
-    </div>
+    </CardShell>
   );
 }
 
 function BudgetCard({ step }) {
+  const totals = step.details?.totals || {};
   return (
-    <div className="mt-2 rounded-md border border-slate-700 bg-slate-950/60 p-2">
-      <div className="mb-1 inline-flex items-center gap-1 text-xs text-slate-200">
-        <Info size={13} />
-        <span>Budget action</span>
-      </div>
+    <CardShell icon={<Info size={13} />} title="Budget action">
       <LabelRow label="Type" value={step.details?.entryType || step.parameters?.type} />
-      <LabelRow label="Amount" value={String(step.details?.amount || step.parameters?.amount || "")} />
+      <LabelRow label="Amount" value={formatAmount(step.details?.amount || step.parameters?.amount)} />
       <LabelRow label="Category" value={step.details?.category || step.parameters?.category} />
-    </div>
+      <LabelRow label="Total income" value={formatAmount(totals.income)} />
+      <LabelRow label="Total expense" value={formatAmount(totals.expense)} />
+      <LabelRow label="Net" value={formatAmount(totals.net)} />
+    </CardShell>
   );
 }
 
 function HabitCard({ step }) {
   return (
-    <div className="mt-2 rounded-md border border-slate-700 bg-slate-950/60 p-2">
-      <div className="mb-1 inline-flex items-center gap-1 text-xs text-slate-200">
-        <Info size={13} />
-        <span>Habit action</span>
-      </div>
+    <CardShell icon={<Info size={13} />} title="Habit action">
       <LabelRow label="Habit" value={step.details?.habit || step.parameters?.habit} />
       <LabelRow label="Status" value={step.details?.status || step.parameters?.status} />
       <LabelRow label="Recent success" value={String(step.details?.recentSuccessCount || "")} />
-    </div>
+      <LabelRow label="Note" value={step.parameters?.note} />
+    </CardShell>
   );
 }
 
 function InboxSummaryCard({ step }) {
+  const messages = Array.isArray(step.parameters?.messages) ? step.parameters.messages : [];
+
   return (
-    <div className="mt-2 rounded-md border border-slate-700 bg-slate-950/60 p-2">
-      <div className="mb-1 inline-flex items-center gap-1 text-xs text-slate-200">
-        <Info size={13} />
-        <span>Inbox summary</span>
-      </div>
+    <CardShell icon={<Info size={13} />} title="Inbox summary">
       <LabelRow label="Messages analyzed" value={String(step.details?.count || "")} />
-    </div>
+      {messages.length > 0 ? (
+        <div className="mt-1 space-y-1 rounded-md border border-slate-700/70 bg-slate-900/90 p-2 text-[11px] text-slate-200">
+          {messages.slice(0, 3).map((item, index) => (
+            <p className="m-0" key={`${item}-${index}`}>{index + 1}. {item}</p>
+          ))}
+        </div>
+      ) : null}
+    </CardShell>
+  );
+}
+
+function FallbackCard({ step }) {
+  return (
+    <CardShell icon={<Info size={13} />} title="Tool result">
+      <LabelRow label="Action" value={step.action} />
+      <LabelRow label="Message" value={step.message} />
+    </CardShell>
   );
 }
 
@@ -341,8 +402,16 @@ export default function ActionResultCard({ step }) {
     return <ResearchCard step={step} />;
   }
 
-  if (action === "get_info" || action === "get_user_info") {
+  if (action === "chat") {
+    return <ChatCard step={step} />;
+  }
+
+  if (action === "get_info") {
     return <InfoCard step={step} />;
+  }
+
+  if (action === "get_user_info") {
+    return <UserInfoCard step={step} />;
   }
 
   if (action === "send_email") {
@@ -365,5 +434,5 @@ export default function ActionResultCard({ step }) {
     return <InboxSummaryCard step={step} />;
   }
 
-  return null;
+  return <FallbackCard step={step} />;
 }

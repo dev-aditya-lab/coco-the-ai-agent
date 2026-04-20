@@ -1,9 +1,107 @@
+function cleanAssistantText(rawText) {
+  const source = typeof rawText === "string" ? rawText : "";
+  if (!source.trim()) {
+    return "";
+  }
+
+  return source
+    .replace(/<think[\s\S]*$/gi, "")
+    .replace(/<think[\s\S]*?<\/think>/gi, "")
+    .replace(/<\/?think>/gi, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+}
+
+function formatAssistantText(rawText) {
+  const cleaned = cleanAssistantText(rawText);
+  if (!cleaned) {
+    return "No response from assistant.";
+  }
+
+  const lines = cleaned.split("\n");
+  const formatted = [];
+
+  for (const originalLine of lines) {
+    const line = originalLine.trim();
+
+    if (!line) {
+      if (formatted.length > 0 && formatted[formatted.length - 1] !== "") {
+        formatted.push("");
+      }
+      continue;
+    }
+
+    if (/^coco$/i.test(line) || /^\d{1,2}:\d{2}:\d{2}\s*(am|pm)$/i.test(line)) {
+      continue;
+    }
+
+    if (/^based on (the )?research:?$/i.test(line)) {
+      formatted.push("## Summary");
+      continue;
+    }
+
+    if (/^research action$/i.test(line)) {
+      formatted.push("### Research Action");
+      continue;
+    }
+
+    if (/^sources:?$/i.test(line)) {
+      formatted.push("### Sources");
+      continue;
+    }
+
+    const stepMatch = line.match(/^step\s*(\d+)\s*:\s*(.+)$/i);
+    if (stepMatch) {
+      const stepAction = stepMatch[2].trim().toLowerCase();
+      if (stepAction === "chat") {
+        continue;
+      }
+      formatted.push(`- **Step ${stepMatch[1]}:** ${stepMatch[2]}`);
+      continue;
+    }
+
+    if (/^raw backend payload$/i.test(line)) {
+      continue;
+    }
+
+    const labelMatch = line.match(/^(topic|depth|final conclusion|reliability note)\s*:\s*(.+)$/i);
+    if (labelMatch) {
+      formatted.push(`- **${labelMatch[1]}:** ${labelMatch[2]}`);
+      continue;
+    }
+
+    if (/^\d+\./.test(line) || /^[-*]\s+/.test(line) || /^#+\s+/.test(line)) {
+      formatted.push(line);
+      continue;
+    }
+
+    if (/^a (digital poster|large group|poster)/i.test(line)) {
+      formatted.push(`- ${line}`);
+      continue;
+    }
+
+    formatted.push(line);
+  }
+
+  const deduped = [];
+  for (const line of formatted) {
+    const previous = deduped[deduped.length - 1];
+    if (line && previous && line.toLowerCase() === previous.toLowerCase()) {
+      continue;
+    }
+    deduped.push(line);
+  }
+
+  return deduped.join("\n").replace(/\n{3,}/g, "\n\n").trim() || "No response from assistant.";
+}
+
 function normalizeStep(step, index) {
   return {
     stepNumber: Number(step?.stepNumber) || index + 1,
     action: typeof step?.action === "string" ? step.action : "unknown",
     status: step?.status === "completed" ? "completed" : "failed",
-    message: typeof step?.message === "string" && step.message.trim() ? step.message : "No details",
+    message: formatAssistantText(step?.message),
     parameters: step?.parameters && typeof step.parameters === "object" ? step.parameters : {},
     details: step?.details && typeof step.details === "object" ? step.details : {},
   };
@@ -15,9 +113,7 @@ export function normalizeCommandResponse(payload, command) {
     : [];
 
   const timestamp = typeof payload?.timestamp === "string" ? payload.timestamp : new Date().toISOString();
-  const finalMessage = typeof payload?.finalMessage === "string" && payload.finalMessage.trim()
-    ? payload.finalMessage
-    : "No response from assistant.";
+  const finalMessage = formatAssistantText(payload?.finalMessage);
 
   return {
     success: Boolean(payload?.success),

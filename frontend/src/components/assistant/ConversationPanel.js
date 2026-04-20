@@ -4,6 +4,8 @@ import StepList from "@/components/assistant/StepList";
 import MarkdownRenderer from "@/components/assistant/MarkdownRenderer";
 import { formatTime } from "@/utils/time";
 
+const SHOW_RAW_PAYLOAD = process.env.NEXT_PUBLIC_SHOW_RAW_PAYLOAD === "1";
+
 function prettyStatus(status) {
   switch (status) {
     case "listening":
@@ -41,10 +43,12 @@ function MessageItem({ item }) {
       {item.response ? (
         <>
           <StepList steps={item.response.steps} />
-          <details className="mt-2 rounded-xl border border-slate-700/80 bg-slate-950/70 p-2">
-            <summary className="cursor-pointer text-xs text-slate-400">Raw backend payload</summary>
-            <pre className="mt-2 whitespace-pre-wrap wrap-break-word text-[11px] text-slate-300">{JSON.stringify(item.response.raw, null, 2)}</pre>
-          </details>
+          {SHOW_RAW_PAYLOAD ? (
+            <details className="mt-2 rounded-xl border border-slate-700/80 bg-slate-950/70 p-2">
+              <summary className="cursor-pointer text-xs text-slate-400">Raw backend payload</summary>
+              <pre className="mt-2 whitespace-pre-wrap wrap-break-word text-[11px] text-slate-300">{JSON.stringify(item.response.raw, null, 2)}</pre>
+            </details>
+          ) : null}
         </>
       ) : null}
     </article>

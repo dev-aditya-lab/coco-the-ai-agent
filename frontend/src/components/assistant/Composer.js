@@ -30,11 +30,17 @@ function chooseVoice(voices, language, gender) {
 export default function Composer({ loading, onSend, latestAssistantMessage = "", onStatusChange }) {
   const [value, setValue] = useState("");
   const [listening, setListening] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const [voiceSupported, setVoiceSupported] = useState(false);
+  const [voiceSupported] = useState(
+    () => typeof window !== "undefined" && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition)
+  );
+  const [speechOutputSupported] = useState(
+    () => typeof window !== "undefined" && Boolean(window.speechSynthesis && window.SpeechSynthesisUtterance)
+  );
   const [voiceError, setVoiceError] = useState("");
   const [voiceStatus, setVoiceStatus] = useState("Voice idle");
-  const [muted, setMuted] = useState(false);
+  const [muted, setMuted] = useState(
+    () => typeof window !== "undefined" && window.localStorage.getItem("coco-muted") === "1"
+  );
   const [speaking, setSpeaking] = useState(false);
   const [voiceSnippet, setVoiceSnippet] = useState("");
   const ttsVoiceRef = useRef(null);
@@ -43,20 +49,24 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "",
   const retryCountRef = useRef(0);
   const maxRetriesRef = useRef(2);
 
-  // Initialize on mount
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    
-    // Check voice support
-    const supported = Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
-    setVoiceSupported(supported);
-    
-    // Load muted state from localStorage
-    const isMuted = window.localStorage.getItem("coco-muted") === "1";
-    setMuted(isMuted);
-    
-    setMounted(true);
-  }, []);
+  const stopSpeechImmediately = () => {
+    if (typeof window === "undefined" || !window.speechSynthesis) {
+      return;
+    }
+
+    // Some browser voices need both pause+cancel to stop instantly.
+    window.speechSynthesis.pause();
+    window.speechSynthesis.cancel();
+    setTimeout(() => {
+      window.speechSynthesis.cancel();
+    }, 0);
+    setTimeout(() => {
+      window.speechSynthesis.cancel();
+    }, 80);
+
+    setSpeaking(false);
+    onStatusChange?.("idle");
+  };
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -65,7 +75,7 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "",
   }, [muted]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !mounted) {
+    if (typeof window === "undefined") {
       return undefined;
     }
 
@@ -156,7 +166,7 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "",
 
   useEffect(() => {
     const text = String(latestAssistantMessage || "").trim();
-    if (!text || muted || !voiceSupported || typeof window === "undefined" || !window.speechSynthesis) {
+    if (!text || muted || !speechOutputSupported || typeof window === "undefined" || !window.speechSynthesis) {
       return;
     }
 
@@ -195,7 +205,7 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "",
 
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);
-  }, [latestAssistantMessage, muted, onStatusChange, voiceSupported]);
+  }, [latestAssistantMessage, muted, onStatusChange, speechOutputSupported]);
 
   useEffect(() => {
     if (loading && !listening) {
@@ -219,7 +229,7 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "",
   };
 
   const toggleVoice = () => {
-    if (!voiceSupported || !recognitionRef.current || loading) {
+    if (muted || !voiceSupported || !recognitionRef.current || loading) {
       return;
     }
 
@@ -249,17 +259,29 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "",
 
   const toggleMute = () => {
     setMuted((previous) => {
-      const next = !previous;
-      if (next && typeof window !== "undefined" && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-        setSpeaking(false);
+      const nextMuted = !previous;
+      if (nextMuted) {
+        stopSpeechImmediately();
+        if (recognitionRef.current) {
+          try {
+            recognitionRef.current.stop();
+          } catch {
+            // no-op
+          }
+        }
+        setListening(false);
+        setVoiceSnippet("");
+        setVoiceStatus("Voice muted");
+      } else {
+        setVoiceStatus("Voice idle");
       }
-      return next;
+      return nextMuted;
     });
   };
 
   const helperStatus = voiceError
     || (loading ? "COCO is thinking and planning actions..." : "")
+    || (muted ? "Voice is muted." : "")
     || (speaking ? "Speaking response..." : "")
     || (voiceSnippet ? `Heard: ${voiceSnippet}` : "")
     || (!voiceSupported ? "Voice input is not supported in this browser." : voiceStatus);
@@ -286,13 +308,13 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "",
             <span>{loading ? "Sending..." : "Send Command"}</span>
           </button>
 
-          {mounted && (
+          {typeof window !== "undefined" && (
             <>
               <button
                 type="button"
                 className="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs text-slate-100 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={toggleVoice}
-                disabled={!voiceSupported || loading}
+                disabled={muted || !voiceSupported || loading}
                 aria-pressed={listening}
               >
                 {listening ? <MicOff size={16} /> : <Mic size={16} />}
@@ -302,7 +324,10 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "",
               <button
                 type="button"
                 className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs ${muted ? "border-slate-500 bg-slate-700 text-slate-200" : "border-slate-600 bg-slate-800 text-slate-100"}`}
+                onPointerDown={!muted ? stopSpeechImmediately : undefined}
                 onClick={toggleMute}
+                disabled={!speechOutputSupported && !voiceSupported}
+                aria-pressed={muted}
               >
                 {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
                 <span>{muted ? "Muted" : "Voice Reply On"}</span>
@@ -311,7 +336,7 @@ export default function Composer({ loading, onSend, latestAssistantMessage = "",
           )}
         </div>
 
-        {mounted && helperStatus ? (
+        {typeof window !== "undefined" && helperStatus ? (
           <p className={`m-0 truncate text-xs ${voiceError ? "text-red-300" : "text-slate-400"}`}>{helperStatus}</p>
         ) : null}
       </form>

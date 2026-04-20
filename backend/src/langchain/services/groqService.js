@@ -8,6 +8,19 @@ import { env } from "../../config/env.js";
 
 const groqInstances = new Map();
 
+function sanitizeModelText(value) {
+  const raw = typeof value === "string" ? value : "";
+  if (!raw) {
+    return "";
+  }
+
+  return raw
+    .replace(/<think[\s\S]*?<\/think>/gi, "")
+    .replace(/<think[\s\S]*$/gi, "")
+    .replace(/<\/?think>/gi, "")
+    .trim();
+}
+
 function parseModelJson(content) {
   const raw = typeof content === "string" ? content.trim() : "";
   if (!raw) {
@@ -107,7 +120,7 @@ export async function getGroqChatResponse(message, history = [], styleInstructio
     });
 
     const response = await groq.invoke(messages);
-    return response.content || "I couldn't process that.";
+    return sanitizeModelText(response.content) || "I couldn't process that.";
   } catch (error) {
     console.error("[groq-service] Chat error:", error.message);
     throw error;
@@ -142,7 +155,7 @@ export async function getGroqInfoResponse(query, styleInstruction = "") {
     ];
 
     const response = await groq.invoke(messages);
-    return response.content || "I couldn't find that information.";
+    return sanitizeModelText(response.content) || "I couldn't find that information.";
   } catch (error) {
     console.error("[groq-service] Info error:", error.message);
     throw error;

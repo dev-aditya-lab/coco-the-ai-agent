@@ -44,7 +44,7 @@ export class ResearchWebTool extends BaseTool {
           },
           search_depth: {
             type: "string",
-            enum: ["basic", "advanced", "fast", "ultra-fast"],
+            enum: ["basic", "advanced"],
             description: "Search depth for Tavily",
           },
           include_answer: {
