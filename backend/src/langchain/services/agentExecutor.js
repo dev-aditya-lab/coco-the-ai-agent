@@ -299,6 +299,58 @@ class AgentExecutor {
     return /\b(remind|reminder|set reminder|set a reminder|schedule reminder|remember me)\b/.test(normalized);
   }
 
+  isTodoIntent(command) {
+    const normalized = typeof command === "string" ? command.trim().toLowerCase() : "";
+    if (!normalized) {
+      return false;
+    }
+
+    return /\b(todo|todos|to-do|to-dos|to do|to dos|task|tasks)\b/.test(normalized)
+      || /\b(add|create|list|show|complete|finish|done|remove|delete|mark)\b.*\b(task|todo|to do)\b/.test(normalized)
+      || /\bmark\b.*\bas\s+done\b/.test(normalized);
+  }
+
+  extractTodoParams(command) {
+    const text = typeof command === "string" ? command.trim() : "";
+    const lower = text.toLowerCase();
+    const quoted = text.match(/"([^"]{2,120})"|“([^”]{2,120})”|'([^']{2,120})'/);
+    const quotedTitle = quoted?.[1] || quoted?.[2] || quoted?.[3] || "";
+
+    const listIntent = /\b(list|show|view|my)\b.*\b(todo|todos|to-do|to-dos|to do|to dos|task|tasks)\b/.test(lower)
+      || /^\s*(todo|todos|tasks|to\s+do)\s*$/i.test(text);
+    const completeIntent = /\b(complete|completed|finish|done|mark)\b/.test(lower)
+      && /\b(task|todo|it|this|as done|done)\b/.test(lower);
+    const removeIntent = /\b(remove|delete|clear)\b/.test(lower)
+      && /\b(task|todo)\b/.test(lower);
+    const prefersLatestPending = /\b(this|it|that|this to do|this todo|this task|that task|that todo|the task|the todo)\b/.test(lower)
+      || /\bmark\b.*\b(as\s+a\s+done|as\s+done|done)\b/.test(lower);
+
+    let operation = "add";
+    if (listIntent) {
+      operation = "list";
+    } else if (completeIntent) {
+      operation = "complete";
+    } else if (removeIntent) {
+      operation = "remove";
+    }
+
+    let title = quotedTitle;
+    if (!title && operation !== "list") {
+      const cleaned = text
+        .replace(/\b(add|create|new|todo|todos|to-do|to-dos|to do|to dos|task|tasks|please|kindly|mark|as done|complete|completed|finish|remove|delete|clear|my)\b/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      title = cleaned;
+    }
+
+    return {
+      operation,
+      title: title || undefined,
+      prefersLatestPending,
+      limit: 6,
+    };
+  }
+
   extractReminderParams(command) {
     const text = typeof command === "string" ? command.trim() : "";
     const lower = text.toLowerCase();
@@ -519,6 +571,10 @@ class AgentExecutor {
 
     if (action === "track_habit" && !next.habit) {
       next.habit = userInput;
+    }
+
+    if (action === "track_todo" && !next.operation) {
+      next.operation = "list";
     }
 
     if (memoryContext) {
@@ -793,6 +849,34 @@ class AgentExecutor {
             autonomousMode: false,
             planner: "shortcut",
             shortcut: "reminder_intent",
+          },
+        };
+      }
+
+      if (this.isTodoIntent(userInput)) {
+        const executedSteps = [];
+        const plannedParams = this.prepareParameters(
+          "track_todo",
+          this.extractTodoParams(userInput),
+          userInput,
+          memoryContext,
+          responseStyle,
+          history,
+        );
+
+        const execution = await this.executeSingleStep("track_todo", plannedParams, 1, executedSteps);
+
+        return {
+          action: "track_todo",
+          result: execution.message,
+          metadata: {
+            duration: Date.now() - startTime,
+            style: responseStyle,
+            parameters: plannedParams,
+            executedSteps,
+            autonomousMode: false,
+            planner: "shortcut",
+            shortcut: "todo_intent",
           },
         };
       }

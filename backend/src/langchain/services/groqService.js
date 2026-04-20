@@ -237,7 +237,7 @@ export async function getGroqActionPlan(command, history = [], memoryContext = "
   Return ONLY a valid JSON object, nothing else.
   Do not wrap in markdown or add any commentary.
 
-  Allowed actions: chat, open_app, open_website, play_youtube, create_file, get_info, get_user_info, research_web, send_email, summarize_inbox, schedule_reminder, track_budget, track_habit
+  Allowed actions: chat, open_app, open_website, play_youtube, create_file, get_info, get_user_info, research_web, send_email, summarize_inbox, schedule_reminder, track_budget, track_habit, track_todo
 
 Use research_web for internet research, current information, latest news, source-backed answers, or when the user explicitly asks to research something online.
 
@@ -336,7 +336,7 @@ Return ONLY valid JSON with this exact shape:
   "done": true_or_false,
   "final_response": "string for the user when done, else empty string",
   "next_action": {
-    "action": "chat|open_app|open_website|play_youtube|create_file|get_info|get_user_info|research_web|send_email|summarize_inbox|schedule_reminder|track_budget|track_habit",
+    "action": "chat|open_app|open_website|play_youtube|create_file|get_info|get_user_info|research_web|send_email|summarize_inbox|schedule_reminder|track_budget|track_habit|track_todo",
     "parameters": {}
   }
 }

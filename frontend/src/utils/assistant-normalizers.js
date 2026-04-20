@@ -148,6 +148,7 @@ export function normalizeTrackerSummary(payload) {
   const reminders = Array.isArray(data.reminders) ? data.reminders : [];
   const budget = data.budget && typeof data.budget === "object" ? data.budget : {};
   const habits = data.habits && typeof data.habits === "object" ? data.habits : {};
+  const todos = data.todos && typeof data.todos === "object" ? data.todos : {};
 
   return {
     reminders: reminders.map((item, index) => ({
@@ -182,6 +183,21 @@ export function normalizeTrackerSummary(payload) {
             status: typeof item?.status === "string" ? item.status : "skipped",
             note: typeof item?.note === "string" ? item.note : "",
             occurredAt: item?.occurredAt || null,
+          }))
+        : [],
+    },
+    todos: {
+      pending: Number(todos?.pending || 0),
+      done: Number(todos?.done || 0),
+      total: Number(todos?.total || 0),
+      recent: Array.isArray(todos?.recent)
+        ? todos.recent.map((item, index) => ({
+            id: String(item?.id || `todo-${index}`),
+            title: typeof item?.title === "string" ? item.title : "",
+            note: typeof item?.note === "string" ? item.note : "",
+            status: typeof item?.status === "string" ? item.status : "pending",
+            createdAt: item?.createdAt || null,
+            updatedAt: item?.updatedAt || null,
           }))
         : [],
     },

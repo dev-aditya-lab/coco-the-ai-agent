@@ -1,10 +1,11 @@
 import { BudgetEntry } from "../models/BudgetEntry.js";
 import { HabitEntry } from "../models/HabitEntry.js";
 import { Reminder } from "../models/Reminder.js";
+import { TodoEntry } from "../models/TodoEntry.js";
 
 export async function getTrackerSummary(req, res) {
   try {
-    const [reminders, recentBudget, recentHabits] = await Promise.all([
+    const [reminders, recentBudget, recentHabits, recentTodos, pendingTodos, doneTodos] = await Promise.all([
       Reminder.find({ status: "pending", dueAt: { $gte: new Date(Date.now() - 12 * 60 * 60 * 1000) } })
         .sort({ dueAt: 1 })
         .limit(6)
@@ -17,6 +18,12 @@ export async function getTrackerSummary(req, res) {
         .sort({ occurredAt: -1 })
         .limit(20)
         .lean(),
+      TodoEntry.find({})
+        .sort({ updatedAt: -1 })
+        .limit(20)
+        .lean(),
+      TodoEntry.countDocuments({ status: "pending" }),
+      TodoEntry.countDocuments({ status: "done" }),
     ]);
 
     const totals = recentBudget.reduce(
@@ -78,6 +85,19 @@ export async function getTrackerSummary(req, res) {
             occurredAt: item.occurredAt,
           })),
         },
+        todos: {
+          pending: pendingTodos,
+          done: doneTodos,
+          total: pendingTodos + doneTodos,
+          recent: recentTodos.slice(0, 6).map((item) => ({
+            id: String(item._id),
+            title: item.title,
+            note: item.note,
+            status: item.status,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt,
+          })),
+        },
       },
       timestamp: new Date().toISOString(),
     });
@@ -89,6 +109,7 @@ export async function getTrackerSummary(req, res) {
         reminders: [],
         budget: { income: 0, expense: 0, net: 0, recent: [] },
         habits: { done: 0, skipped: 0, recent: [] },
+        todos: { pending: 0, done: 0, total: 0, recent: [] },
       },
       timestamp: new Date().toISOString(),
     });

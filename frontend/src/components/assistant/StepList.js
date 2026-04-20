@@ -16,6 +16,7 @@ const ACTION_LABELS = {
   schedule_reminder: "Schedule Reminder",
   track_budget: "Track Budget",
   track_habit: "Track Habit",
+  track_todo: "Track To-Do",
 };
 
 export default function StepList({ steps }) {

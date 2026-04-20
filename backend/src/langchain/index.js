@@ -18,6 +18,7 @@ export { SummarizeInboxTool } from "./tools/summarizeInboxTool.js";
 export { ScheduleReminderTool } from "./tools/scheduleReminderTool.js";
 export { TrackBudgetTool } from "./tools/trackBudgetTool.js";
 export { TrackHabitTool } from "./tools/trackHabitTool.js";
+export { TrackTodoTool } from "./tools/trackTodoTool.js";
 
 // Registry
 export { toolRegistry, getToolRegistry } from "./toolRegistry.js";

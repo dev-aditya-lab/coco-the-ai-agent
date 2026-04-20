@@ -96,6 +96,7 @@ export default function AssistantApp() {
                 data={trackerSummary}
                 loading={loadingTracker}
                 onRefresh={refreshTrackerSummary}
+                onTodoAction={sendCommand}
               />
             </div>
           </aside>

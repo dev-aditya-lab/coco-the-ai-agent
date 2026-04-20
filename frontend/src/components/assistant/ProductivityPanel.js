@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BellRing, CalendarClock, PiggyBank, Target, RefreshCw } from "lucide-react";
+import { BellRing, CalendarClock, PiggyBank, Target, RefreshCw, CheckSquare, CircleCheckBig, Trash2 } from "lucide-react";
 import { formatDateTime } from "@/utils/time";
 
 function NumberMetric({ label, value }) {
@@ -11,10 +11,53 @@ function NumberMetric({ label, value }) {
   );
 }
 
-export default function ProductivityPanel({ data, loading, onRefresh }) {
+function TodoRow({ item, onMarkDone, onDelete }) {
+  const done = item.status === "done";
+  const title = typeof item.title === "string" ? item.title : "";
+
+  return (
+    <article className={`rounded-xl border p-3 transition-colors ${done ? "border-emerald-500/30 bg-emerald-950/20" : "border-cyan-500/25 bg-slate-950/70"}`}>
+      <div className="flex items-start gap-3">
+        <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${done ? "bg-emerald-400" : "bg-cyan-400"}`} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="m-0 truncate text-sm font-semibold text-slate-100">{item.title}</p>
+            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${done ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border-cyan-500/40 bg-cyan-500/10 text-cyan-200"}`}>
+              {done ? "Done" : "Pending"}
+            </span>
+          </div>
+          {item.note ? <p className="m-0 mt-1 text-[11px] leading-5 text-slate-400">{item.note}</p> : null}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => onMarkDone?.(title)}
+              disabled={done || !title}
+              className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-100 transition hover:border-emerald-400/50 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <CircleCheckBig size={12} />
+              Mark done
+            </button>
+            <button
+              type="button"
+              onClick={() => onDelete?.(title)}
+              disabled={!title}
+              className="inline-flex items-center gap-1 rounded-full border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-rose-100 transition hover:border-rose-400/50 hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Trash2 size={12} />
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+export default function ProductivityPanel({ data, loading, onRefresh, onTodoAction }) {
   const reminders = Array.isArray(data?.reminders) ? data.reminders : [];
   const budget = data?.budget || { income: 0, expense: 0, net: 0, recent: [] };
   const habits = data?.habits || { done: 0, skipped: 0, recent: [] };
+  const todos = data?.todos || { pending: 0, done: 0, total: 0, recent: [] };
   const [now, setNow] = useState(0);
 
   useEffect(() => {
@@ -43,6 +86,22 @@ export default function ProductivityPanel({ data, loading, onRefresh }) {
     const mins = Math.floor(delta / 60000);
     const secs = Math.floor((delta % 60000) / 1000);
     return `${mins}m ${secs}s left`;
+  };
+
+  const handleMarkDone = (title) => {
+    if (!title) {
+      return;
+    }
+
+    onTodoAction?.(`mark task "${title}" as done`);
+  };
+
+  const handleDelete = (title) => {
+    if (!title) {
+      return;
+    }
+
+    onTodoAction?.(`delete task "${title}"`);
   };
 
   return (
@@ -87,6 +146,64 @@ export default function ProductivityPanel({ data, loading, onRefresh }) {
               {item.notes ? <p className="m-0 text-[11px] text-slate-300">{item.notes}</p> : null}
             </article>
           ))}
+        </section>
+
+        <section className="grid gap-2">
+          <div className="rounded-2xl border border-cyan-500/20 bg-linear-to-br from-cyan-500/10 via-slate-950/80 to-slate-950 p-3 shadow-[0_14px_30px_-22px_rgba(34,211,238,0.5)]">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-cyan-100">
+                <CheckSquare size={14} />
+                To-Do Board
+              </h3>
+              <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-200">
+                {todos.total || 0} items
+              </span>
+            </div>
+
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <NumberMetric label="Pending" value={String(todos.pending || 0)} />
+              <NumberMetric label="Done" value={String(todos.done || 0)} />
+              <NumberMetric label="Total" value={String(todos.total || 0)} />
+            </div>
+
+            <div className="mt-3">
+              <div className="mb-1 flex items-center justify-between text-[11px] text-slate-400">
+                <span>Completion</span>
+                <span>{todos.total > 0 ? `${Math.round(((todos.done || 0) / todos.total) * 100)}%` : "0%"}</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+                <div
+                  className="h-full rounded-full bg-linear-to-r from-cyan-400 via-sky-400 to-emerald-400 transition-all"
+                  style={{ width: `${todos.total > 0 ? Math.round(((todos.done || 0) / todos.total) * 100) : 0}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="rounded-full border border-slate-700 bg-slate-900/80 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-300">
+                Active focus
+              </span>
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-200">
+                {todos.done || 0} completed
+              </span>
+              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-100">
+                {todos.pending || 0} pending
+              </span>
+            </div>
+          </div>
+
+          {Array.isArray(todos.recent) && todos.recent.length > 0 ? (
+            <div className="grid gap-2">
+              {todos.recent.slice(0, 4).map((item) => (
+                <TodoRow key={item.id} item={item} onMarkDone={handleMarkDone} onDelete={handleDelete} />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-slate-700 bg-slate-950/50 px-3 py-4 text-center">
+              <p className="m-0 text-xs text-slate-300">No tasks tracked yet.</p>
+              <p className="m-0 mt-1 text-[11px] text-slate-500">Add a task to see it appear here as a live board item.</p>
+            </div>
+          )}
         </section>
 
         <section className="grid gap-2">

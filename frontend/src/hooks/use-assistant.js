@@ -116,6 +116,7 @@ export function useAssistant() {
     reminders: [],
     budget: { income: 0, expense: 0, net: 0, recent: [] },
     habits: { done: 0, skipped: 0, recent: [] },
+    todos: { pending: 0, done: 0, total: 0, recent: [] },
   });
   const connectivityFailuresRef = useRef(0);
 

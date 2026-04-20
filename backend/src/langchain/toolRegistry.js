@@ -17,6 +17,7 @@ import { SummarizeInboxTool } from "./tools/summarizeInboxTool.js";
 import { ScheduleReminderTool } from "./tools/scheduleReminderTool.js";
 import { TrackBudgetTool } from "./tools/trackBudgetTool.js";
 import { TrackHabitTool } from "./tools/trackHabitTool.js";
+import { TrackTodoTool } from "./tools/trackTodoTool.js";
 
 class ToolRegistry {
   constructor() {
@@ -42,6 +43,7 @@ class ToolRegistry {
     this.register(new ScheduleReminderTool());
     this.register(new TrackBudgetTool());
     this.register(new TrackHabitTool());
+    this.register(new TrackTodoTool());
   }
 
   /**

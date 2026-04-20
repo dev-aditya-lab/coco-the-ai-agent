@@ -349,6 +349,60 @@ function HabitCard({ step }) {
   );
 }
 
+function TodoCard({ step }) {
+  const operation = cleanText(step.details?.operation || step.parameters?.operation || "list");
+  const stats = step.details?.stats || {};
+  const tasks = Array.isArray(step.details?.tasks)
+    ? step.details.tasks
+    : Array.isArray(stats.recent)
+      ? stats.recent
+      : [];
+
+  return (
+    <CardShell icon={<Info size={13} />} title="To-Do action">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-200">
+          {operation}
+        </span>
+        <span className="rounded-full border border-slate-600/80 bg-slate-900/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300">
+          {stats.pending || 0} pending
+        </span>
+        <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-200">
+          {stats.done || 0} done
+        </span>
+      </div>
+
+      <LabelRow label="Task" value={step.details?.task?.title || step.parameters?.title} />
+
+      {tasks.length > 0 ? (
+        <div className="mt-2 grid gap-2 rounded-xl border border-slate-700/70 bg-slate-950/90 p-2">
+          {tasks.slice(0, 4).map((item, index) => {
+            const done = item.status === "done";
+            return (
+              <div key={`${item.id || item.title}-${index}`} className={`flex items-start gap-2 rounded-lg border px-2 py-2 ${done ? "border-emerald-500/25 bg-emerald-950/20" : "border-cyan-500/20 bg-cyan-950/20"}`}>
+                <div className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${done ? "bg-emerald-400" : "bg-cyan-400"}`} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="m-0 truncate text-sm font-medium text-slate-100">{item.title}</p>
+                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${done ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200" : "border-cyan-500/30 bg-cyan-500/10 text-cyan-200"}`}>
+                      {done ? "Done" : "Pending"}
+                    </span>
+                  </div>
+                  {item.note ? <p className="m-0 mt-1 text-[11px] leading-5 text-slate-400">{item.note}</p> : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mt-2 rounded-lg border border-dashed border-slate-700 bg-slate-950/70 px-3 py-3">
+          <p className="m-0 text-[11px] text-slate-400">No todo items to show right now.</p>
+        </div>
+      )}
+    </CardShell>
+  );
+}
+
 function InboxSummaryCard({ step }) {
   const messages = Array.isArray(step.parameters?.messages) ? step.parameters.messages : [];
 
@@ -428,6 +482,10 @@ export default function ActionResultCard({ step }) {
 
   if (action === "track_habit") {
     return <HabitCard step={step} />;
+  }
+
+  if (action === "track_todo") {
+    return <TodoCard step={step} />;
   }
 
   if (action === "summarize_inbox") {
